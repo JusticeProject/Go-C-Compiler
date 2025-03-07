@@ -13,12 +13,12 @@ type Identifier string
 /////////////////////////////////////////////////////////////////////////////////
 
 type Program struct {
-	f *Function
+	fn *Function
 }
 
 func (p *Program) getPrettyPrintLines() []string {
 	lines := []string{"Program("}
-	newLines := p.f.getPrettyPrintLines()
+	newLines := p.fn.getPrettyPrintLines()
 	lines = append(lines, newLines...)
 	lines = append(lines, ")")
 	return lines
@@ -87,12 +87,12 @@ const (
 
 type Expression struct {
 	typ      ExpressionType
-	intValue int64
+	intValue int32
 }
 
 func (e *Expression) getPrettyPrintLines() []string {
 	typeOfExpression := e.getDesc()
-	lines := []string{typeOfExpression + "(" + strconv.FormatInt(e.intValue, 10) + ")"}
+	lines := []string{typeOfExpression + "(" + strconv.FormatInt(int64(e.intValue), 10) + ")"}
 	return lines
 }
 
@@ -131,7 +131,7 @@ func doParser(tokens []Token) Program {
 
 func parseProgram(tokens []Token) (Program, []Token) {
 	fn, tokens := parseFunction(tokens)
-	pr := Program{f: &fn}
+	pr := Program{fn: &fn}
 	return pr, tokens
 }
 
@@ -178,11 +178,11 @@ func parseIdentifier(tokens []Token) (Identifier, []Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseInteger(tokens []Token) (int64, []Token) {
+func parseInteger(tokens []Token) (int32, []Token) {
 	currentToken, tokens := expect(INT_CONSTANT_TOKEN, tokens)
-	// TODO: what about 8, 16, 32-bit integers?
+	// TODO: what about 8, 16, 64-bit integers?
 	integer, _ := strconv.ParseInt(currentToken.word, 10, 64)
-	return integer, tokens
+	return int32(integer), tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////

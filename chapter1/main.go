@@ -23,7 +23,7 @@ func main() {
 
 func doLinux() {
 	fmt.Println("running Linux version")
-	if len(os.Args) < 2 {
+	if len(os.Args) < 2 || len(os.Args) > 3 {
 		fmt.Println("Usage: goc /path/to/source.c")
 		fmt.Println("Options:")
 		fmt.Println("--lex will run lexer but stop before parsing, no output files are produced")
@@ -47,7 +47,7 @@ func doLinux() {
 
 	fmt.Println("found", len(os.Args), "args")
 
-	if len(os.Args) < 4 {
+	if len(os.Args) == 3 {
 		switch os.Args[2] {
 		case "--lex":
 			fmt.Println("stopping after lexer")
@@ -148,19 +148,21 @@ func doFourCompilerSteps(fileContents string, runParser bool, runAssemblyGenerat
 	}
 
 	// run parser, get the Abstract Syntax Tree
-	doParser(tokens)
+	ast := doParser(tokens)
 
 	if !runAssemblyGeneration {
 		os.Exit(0)
 	}
 
-	// TODO: run assembly generation
+	// run assembly generation
+	asm := doAssemblyGen(ast)
 
 	if !runCodeEmission {
 		os.Exit(0)
 	}
 
-	// TODO: run code emission
+	//run code emission
+	doCodeEmission(asm, assemblyFilename)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
