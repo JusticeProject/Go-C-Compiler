@@ -21,6 +21,9 @@ var regexp_close_parenthesis *regexp.Regexp = regexp.MustCompile(`\)`)
 var regexp_open_brace *regexp.Regexp = regexp.MustCompile(`{`)
 var regexp_close_brace *regexp.Regexp = regexp.MustCompile(`}`)
 var regexp_semicolon *regexp.Regexp = regexp.MustCompile(`;`)
+var regexp_tilde *regexp.Regexp = regexp.MustCompile("~")
+var regexp_hyphen *regexp.Regexp = regexp.MustCompile("-")
+var regexp_two_hyphens *regexp.Regexp = regexp.MustCompile("--")
 
 type TokenEnum int
 
@@ -36,6 +39,9 @@ const (
 	OPEN_BRACE_TOKEN
 	CLOSE_BRACE_TOKEN
 	SEMICOLON_TOKEN
+	TILDE_TOKEN
+	HYPHEN_TOKEN
+	TWO_HYPHENS_TOKEN
 )
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -51,6 +57,9 @@ var allRegexp = map[TokenEnum]*regexp.Regexp{
 	OPEN_BRACE_TOKEN:        regexp_open_brace,
 	CLOSE_BRACE_TOKEN:       regexp_close_brace,
 	SEMICOLON_TOKEN:         regexp_semicolon,
+	TILDE_TOKEN:             regexp_tilde,
+	HYPHEN_TOKEN:            regexp_hyphen,
+	TWO_HYPHENS_TOKEN:       regexp_two_hyphens,
 }
 
 var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{
@@ -93,7 +102,7 @@ func getNextToken(contents string) (newContents string, token Token) {
 
 	// use the regexp to find the longest match at beginning
 	enum, start, end := longestMatchAtStart(newContents)
-	fmt.Printf("%v %v %v\n", enum, start, end)
+	//fmt.Printf("%v %v %v\n", enum, start, end)
 
 	// gather the token info
 	token = Token{word: newContents[start:end], tokenType: enum}

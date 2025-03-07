@@ -59,8 +59,8 @@ func (s *Statement) getPrettyPrintLines() []string {
 	typeOfStatement := s.getDesc()
 
 	lines := []string{typeOfStatement + "("}
-	moreLines := s.exp.getPrettyPrintLines()
-	lines = append(lines, moreLines...)
+	anotherLine := s.exp.getPrettyPrintLine()
+	lines = append(lines, anotherLine)
 	lines = append(lines, ")")
 	return lines
 }
@@ -82,29 +82,49 @@ type ExpressionType int
 
 const (
 	CONSTANT_INT_EXPRESSION ExpressionType = iota
-	BINARY_EXPRESSION
+	UNARY_EXPRESSION
 )
 
 type Expression struct {
 	typ      ExpressionType
 	intValue int32
+	innerExp *Expression
+	unOp     UnaryOperatorType
 }
 
-func (e *Expression) getPrettyPrintLines() []string {
-	typeOfExpression := e.getDesc()
-	lines := []string{typeOfExpression + "(" + strconv.FormatInt(int64(e.intValue), 10) + ")"}
-	return lines
-}
+func (e *Expression) getPrettyPrintLine() string {
+	line := ""
 
-func (e *Expression) getDesc() string {
 	switch e.typ {
 	case CONSTANT_INT_EXPRESSION:
-		return "CONSTANT_INT_EXPRESSION"
-	case BINARY_EXPRESSION:
-		return "BINARY_EXPRESSION"
-	default:
-		return "UNKNOWN_EXPRESSION"
+		line = "CONSTANT_INT_EXPRESSION" + "(" + strconv.FormatInt(int64(e.intValue), 10) + ")"
+	case UNARY_EXPRESSION:
+		line = "UNARY_EXPRESSION_" + getPrettyPrintUnary(e.unOp) + "("
+		line += e.innerExp.getPrettyPrintLine()
+		line += ")"
 	}
+
+	return line
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type UnaryOperatorType int
+
+const (
+	COMPLEMENT_OPERATOR UnaryOperatorType = iota
+	NEGATE_OPERATOR
+)
+
+func getPrettyPrintUnary(typ UnaryOperatorType) string {
+	switch typ {
+	case COMPLEMENT_OPERATOR:
+		return "COMPLEMENT"
+	case NEGATE_OPERATOR:
+		return "NEGATE"
+	}
+
+	return ""
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -163,9 +183,43 @@ func parseStatement(tokens []Token) (Statement, []Token) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseExpression(tokens []Token) (Expression, []Token) {
-	integer, tokens := parseInteger(tokens)
-	ex := Expression{typ: CONSTANT_INT_EXPRESSION, intValue: integer}
-	return ex, tokens
+	nextToken := peekToken(tokens)
+
+	if nextToken.tokenType == INT_CONSTANT_TOKEN {
+		integer, tokens := parseInteger(tokens)
+		ex := Expression{typ: CONSTANT_INT_EXPRESSION, intValue: integer}
+		return ex, tokens
+	} else if nextToken.tokenType == TILDE_TOKEN || nextToken.tokenType == HYPHEN_TOKEN {
+		unopType, tokens := parseUnaryOperator(tokens)
+		innerExp, tokens := parseExpression(tokens)
+		unExp := Expression{typ: UNARY_EXPRESSION, innerExp: &innerExp, unOp: unopType}
+		return unExp, tokens
+	} else if nextToken.tokenType == OPEN_PARENTHESIS_TOKEN {
+		_, tokens := expect(OPEN_PARENTHESIS_TOKEN, tokens)
+		innerExp, tokens := parseExpression(tokens)
+		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+		return innerExp, tokens
+	} else {
+		fmt.Println("Malformed expression.")
+		fmt.Println("Unexpected", allRegexp[nextToken.tokenType])
+		os.Exit(1)
+	}
+
+	// should never reach here, but go compiler complains if there's no return statement
+	return Expression{}, []Token{}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseUnaryOperator(tokens []Token) (UnaryOperatorType, []Token) {
+	unopToken, tokens := takeToken(tokens)
+
+	switch unopToken.tokenType {
+	case TILDE_TOKEN:
+		return COMPLEMENT_OPERATOR, tokens
+	default: // or case HYPHEN_TOKEN:
+		return NEGATE_OPERATOR, tokens
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -203,10 +257,22 @@ func expect(expected TokenEnum, tokens []Token) (Token, []Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func peekToken(tokens []Token) Token {
+	if len(tokens) == 0 {
+		fmt.Println("peekToken(): Ran out of tokens.")
+		return Token{word: "", tokenType: NONE_TOKEN}
+	}
+
+	firstToken := tokens[0]
+	return firstToken
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func takeToken(tokens []Token) (Token, []Token) {
 	// check for no more tokens, don't call os.Exit here, we don't have enough information to print a useful error message
 	if len(tokens) == 0 {
-		fmt.Println("Ran out of tokens.")
+		fmt.Println("takeToken(): Ran out of tokens.")
 		return Token{word: "", tokenType: NONE_TOKEN}, tokens
 	}
 
@@ -250,6 +316,7 @@ func printWithTabs(text string, numTabs int) bool {
 
 	fmt.Printf("%v%v", tabString, text)
 
+	// return true if it ended with a newline
 	lastChar := text[len(text)-1]
 	if lastChar == '(' || lastChar == ')' || lastChar == ',' {
 		fmt.Printf("\n")

@@ -124,7 +124,7 @@ func doLinux() {
 
 func doWindows() {
 	fmt.Println("running Windows debug version")
-	filename := "return_2.c"
+	filename := "test.c"
 
 	contents := loadFile(filename)
 	assemblyFilename := strings.TrimSuffix(filename, ".c") + ".s"
@@ -138,6 +138,7 @@ func doFourCompilerSteps(fileContents string, runParser bool, runAssemblyGenerat
 	fmt.Println(fileContents)
 
 	// run lexer
+	fmt.Println("running lexer")
 	tokens := doLexer(fileContents)
 	fmt.Println("found tokens:")
 	fmt.Println(tokens)
@@ -148,6 +149,7 @@ func doFourCompilerSteps(fileContents string, runParser bool, runAssemblyGenerat
 	}
 
 	// run parser, get the Abstract Syntax Tree
+	fmt.Println("running parser")
 	ast := doParser(tokens)
 
 	if !runAssemblyGeneration {
@@ -155,6 +157,7 @@ func doFourCompilerSteps(fileContents string, runParser bool, runAssemblyGenerat
 	}
 
 	// run assembly generation
+	fmt.Println("running assembly generation")
 	asm := doAssemblyGen(ast)
 
 	if !runCodeEmission {
@@ -162,6 +165,7 @@ func doFourCompilerSteps(fileContents string, runParser bool, runAssemblyGenerat
 	}
 
 	//run code emission
+	fmt.Println("running code emission")
 	doCodeEmission(asm, assemblyFilename)
 }
 
