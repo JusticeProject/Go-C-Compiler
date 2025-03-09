@@ -8,10 +8,6 @@ import (
 
 /////////////////////////////////////////////////////////////////////////////////
 
-type Identifier string
-
-/////////////////////////////////////////////////////////////////////////////////
-
 type Program struct {
 	fn *Function
 }
@@ -27,7 +23,7 @@ func (p *Program) getPrettyPrintLines() []string {
 /////////////////////////////////////////////////////////////////////////////////
 
 type Function struct {
-	name Identifier
+	name string
 	body *Statement
 }
 
@@ -59,8 +55,8 @@ func (s *Statement) getPrettyPrintLines() []string {
 	typeOfStatement := s.getDesc()
 
 	lines := []string{typeOfStatement + "("}
-	anotherLine := s.exp.getPrettyPrintLine()
-	lines = append(lines, anotherLine)
+	moreLines := s.exp.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
 	lines = append(lines, ")")
 	return lines
 }
@@ -92,19 +88,22 @@ type Expression struct {
 	unOp     UnaryOperatorType
 }
 
-func (e *Expression) getPrettyPrintLine() string {
-	line := ""
+func (e *Expression) getPrettyPrintLines() []string {
+	lines := []string{}
 
 	switch e.typ {
 	case CONSTANT_INT_EXPRESSION:
-		line = "CONSTANT_INT_EXPRESSION" + "(" + strconv.FormatInt(int64(e.intValue), 10) + ")"
+		line := "CONSTANT_INT_EXPRESSION" + "(" + strconv.FormatInt(int64(e.intValue), 10) + ")"
+		lines = append(lines, line)
 	case UNARY_EXPRESSION:
-		line = "UNARY_EXPRESSION_" + getPrettyPrintUnary(e.unOp) + "("
-		line += e.innerExp.getPrettyPrintLine()
-		line += ")"
+		line := "UNARY_EXPRESSION_" + getPrettyPrintUnary(e.unOp) + "("
+		lines = append(lines, line)
+		moreLines := e.innerExp.getPrettyPrintLines()
+		lines = append(lines, moreLines...)
+		lines = append(lines, ")")
 	}
 
-	return line
+	return lines
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -224,9 +223,9 @@ func parseUnaryOperator(tokens []Token) (UnaryOperatorType, []Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseIdentifier(tokens []Token) (Identifier, []Token) {
+func parseIdentifier(tokens []Token) (string, []Token) {
 	currentToken, tokens := expect(IDENTIFIER_TOKEN, tokens)
-	id := Identifier(currentToken.word)
+	id := currentToken.word
 	return id, tokens
 }
 

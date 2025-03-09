@@ -27,7 +27,8 @@ func doLinux() {
 		fmt.Println("Usage: goc /path/to/source.c")
 		fmt.Println("Options:")
 		fmt.Println("--lex will run lexer but stop before parsing, no output files are produced")
-		fmt.Println("--parse will run lexer and parser but stop before assembly generation, no output files are produced")
+		fmt.Println("--parse will run lexer and parser but stop before tacky generation, no output files are produced")
+		fmt.Println("--tacky will run lexer, parser, tacky generation but stop before assembly generation, no output files are produced")
 		fmt.Println("--codegen will run lexer, parser, and assembly generation but stop before code emission, no output files are produced")
 		fmt.Println("-S will emit an assembly file but will not assemble or link it")
 		os.Exit(1)
@@ -41,6 +42,7 @@ func doLinux() {
 	fmt.Println("found inputFilename", inputFilename)
 
 	runParser := true
+	runTackyGeneration := true
 	runAssemblyGeneration := true
 	runCodeEmission := true
 	produceExecutable := true
@@ -52,24 +54,35 @@ func doLinux() {
 		case "--lex":
 			fmt.Println("stopping after lexer")
 			runParser = false
+			runTackyGeneration = false
 			runAssemblyGeneration = false
 			runCodeEmission = false
 			produceExecutable = false
 		case "--parse":
 			fmt.Println("stopping after parser")
 			runParser = true
+			runTackyGeneration = false
+			runAssemblyGeneration = false
+			runCodeEmission = false
+			produceExecutable = false
+		case "--tacky":
+			fmt.Println("stopping after tacky genration")
+			runParser = true
+			runTackyGeneration = true
 			runAssemblyGeneration = false
 			runCodeEmission = false
 			produceExecutable = false
 		case "--codegen":
 			fmt.Println("stopping after assembly generation")
 			runParser = true
+			runTackyGeneration = true
 			runAssemblyGeneration = true
 			runCodeEmission = false
 			produceExecutable = false
 		case "-S":
 			fmt.Println("stopping after code emission")
 			runParser = true
+			runTackyGeneration = true
 			runAssemblyGeneration = true
 			runCodeEmission = true
 			produceExecutable = false
@@ -98,7 +111,7 @@ func doLinux() {
 
 	// do the compilation
 	assemblyFilename := strings.TrimSuffix(inputFilename, ".c") + ".s"
-	doFourCompilerSteps(fileContents, runParser, runAssemblyGeneration, runCodeEmission, assemblyFilename)
+	doCompilerSteps(fileContents, runParser, runTackyGeneration, runAssemblyGeneration, runCodeEmission, assemblyFilename)
 
 	if !produceExecutable {
 		os.Exit(0)
@@ -128,12 +141,14 @@ func doWindows() {
 
 	contents := loadFile(filename)
 	assemblyFilename := strings.TrimSuffix(filename, ".c") + ".s"
-	doFourCompilerSteps(contents, true, true, true, assemblyFilename)
+	doCompilerSteps(contents, true, true, true, true, assemblyFilename)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func doFourCompilerSteps(fileContents string, runParser bool, runAssemblyGeneration bool, runCodeEmission bool, assemblyFilename string) {
+func doCompilerSteps(fileContents string, runParser bool, runTackyGeneration bool,
+	runAssemblyGeneration bool, runCodeEmission bool, assemblyFilename string) {
+
 	fmt.Println("running compiler with fileContents:")
 	fmt.Println(fileContents)
 
@@ -152,13 +167,22 @@ func doFourCompilerSteps(fileContents string, runParser bool, runAssemblyGenerat
 	fmt.Println("running parser")
 	ast := doParser(tokens)
 
+	if !runTackyGeneration {
+		fmt.Println("not running tacky generation, done")
+		os.Exit(0)
+	}
+
+	// run tacky generation
+	fmt.Println("running tacky generation")
+	tacky := doTackyGen(ast)
+
 	if !runAssemblyGeneration {
 		os.Exit(0)
 	}
 
 	// run assembly generation
 	fmt.Println("running assembly generation")
-	asm := doAssemblyGen(ast)
+	asm := doAssemblyGen(tacky)
 
 	if !runCodeEmission {
 		os.Exit(0)
