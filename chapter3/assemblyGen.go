@@ -27,8 +27,6 @@ type Function_Asm struct {
 //###############################################################################
 
 type Instruction_Asm interface {
-	replacePseudoregisters(stackOffset *int32, nameToOffset *map[string]int32)
-	fixInvalidInstr() []Instruction_Asm
 	instrEmitAsm(file *os.File)
 }
 
@@ -39,24 +37,11 @@ type Mov_Instruction_Asm struct {
 	dst Operand_Asm
 }
 
-func (instr *Mov_Instruction_Asm) replacePseudoregisters(stackOffset *int32, nameToOffset *map[string]int32) {
-	instr.src = instr.src.replaceIfPseudoregister(stackOffset, nameToOffset)
-	instr.dst = instr.dst.replaceIfPseudoregister(stackOffset, nameToOffset)
-}
-
 /////////////////////////////////////////////////////////////////////////////////
 
 type Unary_Instruction_Asm struct {
 	unOp UnaryOperatorTypeAsm
 	src  Operand_Asm
-}
-
-func (instr *Unary_Instruction_Asm) replacePseudoregisters(stackOffset *int32, nameToOffset *map[string]int32) {
-	instr.src = instr.src.replaceIfPseudoregister(stackOffset, nameToOffset)
-}
-
-func (instr *Unary_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
-	return []Instruction_Asm{instr}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -67,15 +52,6 @@ type Binary_Instruction_Asm struct {
 	dst   Operand_Asm
 }
 
-func (instr *Binary_Instruction_Asm) replacePseudoregisters(stackOffset *int32, nameToOffset *map[string]int32) {
-	instr.src = instr.src.replaceIfPseudoregister(stackOffset, nameToOffset)
-	instr.dst = instr.dst.replaceIfPseudoregister(stackOffset, nameToOffset)
-}
-
-func (instr *Binary_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
-	return []Instruction_Asm{instr}
-}
-
 /////////////////////////////////////////////////////////////////////////////////
 
 type IDivide_Instruction_Asm struct {
@@ -84,26 +60,9 @@ type IDivide_Instruction_Asm struct {
 	dst  Operand_Asm
 }
 
-func (instr *IDivide_Instruction_Asm) replacePseudoregisters(stackOffset *int32, nameToOffset *map[string]int32) {
-	instr.src1 = instr.src1.replaceIfPseudoregister(stackOffset, nameToOffset)
-	instr.src2 = instr.src2.replaceIfPseudoregister(stackOffset, nameToOffset)
-	instr.dst = instr.dst.replaceIfPseudoregister(stackOffset, nameToOffset)
-}
-
-func (instr *IDivide_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
-	return []Instruction_Asm{instr}
-}
-
 /////////////////////////////////////////////////////////////////////////////////
 
 type CDQ_Sign_Extend_Instruction_Asm struct {
-}
-
-func (instr *CDQ_Sign_Extend_Instruction_Asm) replacePseudoregisters(stackOffset *int32, nameToOffset *map[string]int32) {
-}
-
-func (instr *CDQ_Sign_Extend_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
-	return []Instruction_Asm{instr}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -112,24 +71,9 @@ type Allocate_Stack_Instruction_Asm struct {
 	op Operand_Asm
 }
 
-func (instr *Allocate_Stack_Instruction_Asm) replacePseudoregisters(stackOffset *int32, nameToOffset *map[string]int32) {
-	instr.op = instr.op.replaceIfPseudoregister(stackOffset, nameToOffset)
-}
-
-func (instr *Allocate_Stack_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
-	return []Instruction_Asm{instr}
-}
-
 /////////////////////////////////////////////////////////////////////////////////
 
 type Ret_Instruction_Asm struct {
-}
-
-func (instr *Ret_Instruction_Asm) replacePseudoregisters(stackOffset *int32, nameToOffset *map[string]int32) {
-}
-
-func (instr *Ret_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
-	return []Instruction_Asm{instr}
 }
 
 //###############################################################################
@@ -190,7 +134,7 @@ func convertBinaryOpToAsm(binOp BinaryOperatorType) BinaryOperatorTypeAsm {
 //###############################################################################
 
 type Operand_Asm interface {
-	replaceIfPseudoregister(stackOffset *int32, nameToOffset *map[string]int32) Operand_Asm
+	getOperandString() string
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -199,18 +143,10 @@ type Immediate_Int_Operand_Asm struct {
 	value int32
 }
 
-func (op *Immediate_Int_Operand_Asm) replaceIfPseudoregister(stackOffset *int32, nameToOffset *map[string]int32) Operand_Asm {
-	return op
-}
-
 /////////////////////////////////////////////////////////////////////////////////
 
 type Register_Operand_Asm struct {
 	reg RegisterTypeAsm
-}
-
-func (op *Register_Operand_Asm) replaceIfPseudoregister(stackOffset *int32, nameToOffset *map[string]int32) Operand_Asm {
-	return op
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -223,10 +159,6 @@ type Pseudoregister_Operand_Asm struct {
 
 type Stack_Operand_Asm struct {
 	value int32
-}
-
-func (op *Stack_Operand_Asm) replaceIfPseudoregister(stackOffset *int32, nameToOffset *map[string]int32) Operand_Asm {
-	return op
 }
 
 //###############################################################################
@@ -334,7 +266,9 @@ func (val *Variable_Value_Tacky) valueToAsm() Operand_Asm {
 	return &Pseudoregister_Operand_Asm{name: val.name}
 }
 
-/////////////////////////////////////////////////////////////////////////////////
+//###############################################################################
+//###############################################################################
+//###############################################################################
 
 func (pr *Program_Asm) replacePseudoregisters() int32 {
 	// TODO: need to handle more than one function
@@ -343,7 +277,16 @@ func (pr *Program_Asm) replacePseudoregisters() int32 {
 	nameToOffset := make(map[string]int32)
 
 	for index, _ := range pr.fn.instructions {
-		pr.fn.instructions[index].replacePseudoregisters(&stackOffset, &nameToOffset)
+		switch convertedInstr := pr.fn.instructions[index].(type) {
+		case *Mov_Instruction_Asm:
+			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &stackOffset, &nameToOffset)
+			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &stackOffset, &nameToOffset)
+			pr.fn.instructions[index] = convertedInstr
+		case *Unary_Instruction_Asm:
+			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &stackOffset, &nameToOffset)
+			pr.fn.instructions[index] = convertedInstr
+		}
+
 	}
 
 	return stackOffset
@@ -351,22 +294,30 @@ func (pr *Program_Asm) replacePseudoregisters() int32 {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (op *Pseudoregister_Operand_Asm) replaceIfPseudoregister(stackOffset *int32, nameToOffset *map[string]int32) Operand_Asm {
+func replaceIfPseudoregister(op Operand_Asm, stackOffset *int32, nameToOffset *map[string]int32) Operand_Asm {
 	if op == nil {
 		return nil
 	}
 
-	existingOffset, alreadyExists := (*nameToOffset)[op.name]
+	convertedOp, isPseudo := op.(*Pseudoregister_Operand_Asm)
+
+	if !isPseudo {
+		return op
+	}
+
+	existingOffset, alreadyExists := (*nameToOffset)[convertedOp.name]
 	if alreadyExists {
 		return &Stack_Operand_Asm{value: existingOffset}
 	} else {
 		*stackOffset = *stackOffset - 4
-		(*nameToOffset)[op.name] = *stackOffset
+		(*nameToOffset)[convertedOp.name] = *stackOffset
 		return &Stack_Operand_Asm{value: *stackOffset}
 	}
 }
 
-/////////////////////////////////////////////////////////////////////////////////
+//###############################################################################
+//###############################################################################
+//###############################################################################
 
 func (pr *Program_Asm) instructionFixup(stackOffset int32) {
 	// TODO: need to handle more than one function
@@ -381,7 +332,7 @@ func (pr *Program_Asm) instructionFixup(stackOffset int32) {
 	instructions = []Instruction_Asm{}
 
 	for index, _ := range pr.fn.instructions {
-		newInstrs := pr.fn.instructions[index].fixInvalidInstr()
+		newInstrs := fixInvalidInstr(pr.fn.instructions[index])
 		instructions = append(instructions, newInstrs...)
 	}
 
@@ -390,16 +341,19 @@ func (pr *Program_Asm) instructionFixup(stackOffset int32) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (instr *Mov_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
-	_, srcIsStack := instr.src.(*Stack_Operand_Asm)
-	_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
+func fixInvalidInstr(instr Instruction_Asm) []Instruction_Asm {
+	switch convertedInstr := instr.(type) {
+	case *Mov_Instruction_Asm:
+		_, srcIsStack := convertedInstr.src.(*Stack_Operand_Asm)
+		_, dstIsStack := convertedInstr.dst.(*Stack_Operand_Asm)
 
-	if srcIsStack && dstIsStack {
-		intermediateOperand := Register_Operand_Asm{reg: R10_REGISTER_ASM}
-		firstInstr := Mov_Instruction_Asm{src: instr.src, dst: &intermediateOperand}
-		secondInstr := Mov_Instruction_Asm{src: &intermediateOperand, dst: instr.dst}
-		return []Instruction_Asm{&firstInstr, &secondInstr}
-	} else {
-		return []Instruction_Asm{instr}
+		if srcIsStack && dstIsStack {
+			intermediateOperand := Register_Operand_Asm{reg: R10_REGISTER_ASM}
+			firstInstr := Mov_Instruction_Asm{src: convertedInstr.src, dst: &intermediateOperand}
+			secondInstr := Mov_Instruction_Asm{src: &intermediateOperand, dst: convertedInstr.dst}
+			return []Instruction_Asm{&firstInstr, &secondInstr}
+		}
 	}
+
+	return []Instruction_Asm{instr}
 }

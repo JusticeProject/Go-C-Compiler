@@ -44,31 +44,45 @@ func (fn *Function_Asm) emitAssembly(file *os.File) {
 	}
 }
 
-/////////////////////////////////////////////////////////////////////////////////
+//###############################################################################
+//###############################################################################
+//###############################################################################
 
 func (instr *Mov_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "movl" + "\t" + getOperandString(instr.src) + ", " + getOperandString(instr.dst) + "\n")
+	file.WriteString("\t" + "movl" + "\t" + instr.src.getOperandString() + ", " + instr.dst.getOperandString() + "\n")
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+
 func (instr *Unary_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + getUnaryOperatorString(instr.unOp) + "\t" + getOperandString(instr.src) + "\n")
+	file.WriteString("\t" + getUnaryOperatorString(instr.unOp) + "\t" + instr.src.getOperandString() + "\n")
 }
+
+/////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Binary_Instruction_Asm) instrEmitAsm(file *os.File) {
 	// TODO:
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+
 func (instr *IDivide_Instruction_Asm) instrEmitAsm(file *os.File) {
 	// TODO:
 }
+
+/////////////////////////////////////////////////////////////////////////////////
 
 func (instr *CDQ_Sign_Extend_Instruction_Asm) instrEmitAsm(file *os.File) {
 	// TODO:
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+
 func (instr *Allocate_Stack_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "subq" + "\t" + getOperandString(instr.op) + ", %rsp" + "\n")
+	file.WriteString("\t" + "subq" + "\t" + instr.op.getOperandString() + ", %rsp" + "\n")
 }
+
+/////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Ret_Instruction_Asm) instrEmitAsm(file *os.File) {
 	// include the function epilogue instructions for restoring the stack
@@ -77,7 +91,9 @@ func (instr *Ret_Instruction_Asm) instrEmitAsm(file *os.File) {
 	file.WriteString("\t" + "ret" + "\n")
 }
 
-/////////////////////////////////////////////////////////////////////////////////
+//###############################################################################
+//###############################################################################
+//###############################################################################
 
 func getUnaryOperatorString(unOp UnaryOperatorTypeAsm) string {
 	switch unOp {
@@ -93,25 +109,37 @@ func getUnaryOperatorString(unOp UnaryOperatorTypeAsm) string {
 	return ""
 }
 
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+func (op *Immediate_Int_Operand_Asm) getOperandString() string {
+	return "$" + strconv.FormatInt(int64(op.value), 10)
+}
+
 /////////////////////////////////////////////////////////////////////////////////
 
-func getOperandString(op Operand_Asm) string {
-	switch convertedOp := op.(type) {
-	case *Immediate_Int_Operand_Asm:
-		return "$" + strconv.FormatInt(int64(convertedOp.value), 10)
-	case *Register_Operand_Asm:
-		return "%" + getRegisterString(convertedOp.reg)
-	case *Stack_Operand_Asm:
-		return strconv.FormatInt(int64(convertedOp.value), 10) + "(%rbp)"
-	default:
-		fmt.Println("unknown operand type:", op)
-		os.Exit(1)
-	}
+func (op *Register_Operand_Asm) getOperandString() string {
+	return "%" + getRegisterString(op.reg)
+}
 
+/////////////////////////////////////////////////////////////////////////////////
+
+func (op *Pseudoregister_Operand_Asm) getOperandString() string {
+	fmt.Println("cannot emit pseudoregister")
+	os.Exit(1)
 	return ""
 }
 
 /////////////////////////////////////////////////////////////////////////////////
+
+func (op *Stack_Operand_Asm) getOperandString() string {
+	return strconv.FormatInt(int64(op.value), 10) + "(%rbp)"
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
 
 func getRegisterString(reg RegisterTypeAsm) string {
 	switch reg {
