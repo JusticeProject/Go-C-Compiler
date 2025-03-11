@@ -61,25 +61,26 @@ func (instr *Unary_Instruction_Asm) instrEmitAsm(file *os.File) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Binary_Instruction_Asm) instrEmitAsm(file *os.File) {
-	// TODO:
+	file.WriteString("\t" + getBinaryOperatorString(instr.binOp) + "\t" + instr.src.getOperandString() + ", " +
+		instr.dst.getOperandString() + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *IDivide_Instruction_Asm) instrEmitAsm(file *os.File) {
-	// TODO:
+	file.WriteString("\t" + "idivl" + "\t" + instr.divisor.getOperandString() + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *CDQ_Sign_Extend_Instruction_Asm) instrEmitAsm(file *os.File) {
-	// TODO:
+	file.WriteString("\t" + "cdq" + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Allocate_Stack_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "subq" + "\t" + instr.op.getOperandString() + ", %rsp" + "\n")
+	file.WriteString("\t" + "subq" + "\t" + instr.stackSize.getOperandString() + ", %rsp" + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -103,6 +104,26 @@ func getUnaryOperatorString(unOp UnaryOperatorTypeAsm) string {
 		return "notl"
 	default:
 		fmt.Println("unknown unary operator:", unOp)
+		os.Exit(1)
+	}
+
+	return ""
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+func getBinaryOperatorString(binOp BinaryOperatorTypeAsm) string {
+	switch binOp {
+	case ADD_OPERATOR_ASM:
+		return "addl"
+	case SUB_OPERATOR_ASM:
+		return "subl"
+	case MULT_OPERATOR_ASM:
+		return "imull"
+	default:
+		fmt.Println("unknown binary operator:", binOp)
 		os.Exit(1)
 	}
 
@@ -145,8 +166,12 @@ func getRegisterString(reg RegisterTypeAsm) string {
 	switch reg {
 	case AX_REGISTER_ASM:
 		return "eax"
+	case DX_REGISTER_ASM:
+		return "edx"
 	case R10_REGISTER_ASM:
 		return "r10d"
+	case R11_REGISTER_ASM:
+		return "r11d"
 	default:
 		fmt.Println("unknown register:", reg)
 		os.Exit(1)

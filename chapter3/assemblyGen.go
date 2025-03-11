@@ -55,9 +55,7 @@ type Binary_Instruction_Asm struct {
 /////////////////////////////////////////////////////////////////////////////////
 
 type IDivide_Instruction_Asm struct {
-	src1 Operand_Asm
-	src2 Operand_Asm
-	dst  Operand_Asm
+	divisor Operand_Asm
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -68,7 +66,7 @@ type CDQ_Sign_Extend_Instruction_Asm struct {
 /////////////////////////////////////////////////////////////////////////////////
 
 type Allocate_Stack_Instruction_Asm struct {
-	op Operand_Asm
+	stackSize Operand_Asm
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -115,6 +113,7 @@ const (
 )
 
 func convertBinaryOpToAsm(binOp BinaryOperatorType) BinaryOperatorTypeAsm {
+	// TODO: do I really need to convert? or should I just use the same enum for both applications?
 	switch binOp {
 	case ADD_OPERATOR:
 		return ADD_OPERATOR_ASM
@@ -246,9 +245,19 @@ func (instr *Binary_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 		instructions := []Instruction_Asm{&movInstr, &binInstr}
 		return instructions
 	} else if instr.binOp == DIVIDE_OPERATOR {
-		// TODO:
+		firstMov := Mov_Instruction_Asm{src: instr.src1.valueToAsm(), dst: &Register_Operand_Asm{AX_REGISTER_ASM}}
+		cdq := CDQ_Sign_Extend_Instruction_Asm{}
+		idiv := IDivide_Instruction_Asm{divisor: instr.src2.valueToAsm()}
+		secondMov := Mov_Instruction_Asm{src: &Register_Operand_Asm{AX_REGISTER_ASM}, dst: instr.dst.valueToAsm()}
+		instructions := []Instruction_Asm{&firstMov, &cdq, &idiv, &secondMov}
+		return instructions
 	} else if instr.binOp == REMAINDER_OPERATOR {
-		// TODO:
+		firstMov := Mov_Instruction_Asm{src: instr.src1.valueToAsm(), dst: &Register_Operand_Asm{AX_REGISTER_ASM}}
+		cdq := CDQ_Sign_Extend_Instruction_Asm{}
+		idiv := IDivide_Instruction_Asm{divisor: instr.src2.valueToAsm()}
+		secondMov := Mov_Instruction_Asm{src: &Register_Operand_Asm{DX_REGISTER_ASM}, dst: instr.dst.valueToAsm()}
+		instructions := []Instruction_Asm{&firstMov, &cdq, &idiv, &secondMov}
+		return instructions
 	}
 
 	return nil
@@ -284,6 +293,13 @@ func (pr *Program_Asm) replacePseudoregisters() int32 {
 			pr.fn.instructions[index] = convertedInstr
 		case *Unary_Instruction_Asm:
 			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &stackOffset, &nameToOffset)
+			pr.fn.instructions[index] = convertedInstr
+		case *Binary_Instruction_Asm:
+			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &stackOffset, &nameToOffset)
+			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &stackOffset, &nameToOffset)
+			pr.fn.instructions[index] = convertedInstr
+		case *IDivide_Instruction_Asm:
+			convertedInstr.divisor = replaceIfPseudoregister(convertedInstr.divisor, &stackOffset, &nameToOffset)
 			pr.fn.instructions[index] = convertedInstr
 		}
 
@@ -324,16 +340,29 @@ func (pr *Program_Asm) instructionFixup(stackOffset int32) {
 
 	// insert instruction to allocate space on the stack
 	op := Immediate_Int_Operand_Asm{value: -stackOffset}
-	firstInstr := Allocate_Stack_Instruction_Asm{op: &op}
+	firstInstr := Allocate_Stack_Instruction_Asm{stackSize: &op}
 	instructions := []Instruction_Asm{&firstInstr}
 	pr.fn.instructions = append(instructions, pr.fn.instructions...)
 
 	// rewrite invalid instructions, they can't have both operands be Stack operands
 	instructions = []Instruction_Asm{}
 
-	for index, _ := range pr.fn.instructions {
-		newInstrs := fixInvalidInstr(pr.fn.instructions[index])
-		instructions = append(instructions, newInstrs...)
+	for _, instr := range pr.fn.instructions {
+
+		switch convertedInstr := instr.(type) {
+		case *Mov_Instruction_Asm:
+			newInstrs := convertedInstr.fixInvalidInstr()
+			instructions = append(instructions, newInstrs...)
+		case *Binary_Instruction_Asm:
+			newInstrs := convertedInstr.fixInvalidInstr()
+			instructions = append(instructions, newInstrs...)
+		case *IDivide_Instruction_Asm:
+			newInstrs := convertedInstr.fixInvalidInstr()
+			instructions = append(instructions, newInstrs...)
+		default:
+			// don't need to fix it, just add it to the list
+			instructions = append(instructions, instr)
+		}
 	}
 
 	pr.fn.instructions = instructions
@@ -341,18 +370,56 @@ func (pr *Program_Asm) instructionFixup(stackOffset int32) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func fixInvalidInstr(instr Instruction_Asm) []Instruction_Asm {
-	switch convertedInstr := instr.(type) {
-	case *Mov_Instruction_Asm:
-		_, srcIsStack := convertedInstr.src.(*Stack_Operand_Asm)
-		_, dstIsStack := convertedInstr.dst.(*Stack_Operand_Asm)
+func (instr *Mov_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
+	_, srcIsStack := instr.src.(*Stack_Operand_Asm)
+	_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
+
+	if srcIsStack && dstIsStack {
+		intermediateOperand := Register_Operand_Asm{R10_REGISTER_ASM}
+		firstInstr := Mov_Instruction_Asm{src: instr.src, dst: &intermediateOperand}
+		secondInstr := Mov_Instruction_Asm{src: &intermediateOperand, dst: instr.dst}
+		return []Instruction_Asm{&firstInstr, &secondInstr}
+	}
+
+	return []Instruction_Asm{instr}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (instr *Binary_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
+	if instr.binOp == ADD_OPERATOR_ASM || instr.binOp == SUB_OPERATOR_ASM {
+		_, srcIsStack := instr.src.(*Stack_Operand_Asm)
+		_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
 
 		if srcIsStack && dstIsStack {
-			intermediateOperand := Register_Operand_Asm{reg: R10_REGISTER_ASM}
-			firstInstr := Mov_Instruction_Asm{src: convertedInstr.src, dst: &intermediateOperand}
-			secondInstr := Mov_Instruction_Asm{src: &intermediateOperand, dst: convertedInstr.dst}
+			intermediateOperand := Register_Operand_Asm{R10_REGISTER_ASM}
+			firstInstr := Mov_Instruction_Asm{src: instr.src, dst: &intermediateOperand}
+			secondInstr := Binary_Instruction_Asm{binOp: instr.binOp, src: &intermediateOperand, dst: instr.dst}
 			return []Instruction_Asm{&firstInstr, &secondInstr}
 		}
+	} else if instr.binOp == MULT_OPERATOR_ASM {
+		_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
+
+		if dstIsStack {
+			firstInstr := Mov_Instruction_Asm{src: instr.dst, dst: &Register_Operand_Asm{R11_REGISTER_ASM}}
+			secondInstr := Binary_Instruction_Asm{binOp: instr.binOp, src: instr.src, dst: &Register_Operand_Asm{R11_REGISTER_ASM}}
+			thirdInstr := Mov_Instruction_Asm{src: &Register_Operand_Asm{R11_REGISTER_ASM}, dst: instr.dst}
+			return []Instruction_Asm{&firstInstr, &secondInstr, &thirdInstr}
+		}
+	}
+
+	return []Instruction_Asm{instr}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (instr *IDivide_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
+	_, isConstant := instr.divisor.(*Immediate_Int_Operand_Asm)
+
+	if isConstant {
+		firstInstr := Mov_Instruction_Asm{src: instr.divisor, dst: &Register_Operand_Asm{R10_REGISTER_ASM}}
+		secondInstr := IDivide_Instruction_Asm{divisor: &Register_Operand_Asm{R10_REGISTER_ASM}}
+		return []Instruction_Asm{&firstInstr, &secondInstr}
 	}
 
 	return []Instruction_Asm{instr}
