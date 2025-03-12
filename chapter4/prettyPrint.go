@@ -124,6 +124,8 @@ func getPrettyPrintUnary(typ UnaryOperatorType) string {
 		return "COMPLEMENT"
 	case NEGATE_OPERATOR:
 		return "NEGATE"
+	case NOT_OPERATOR:
+		return "NOT"
 	default:
 		fmt.Println("unknown Unary operator:", typ)
 		os.Exit(1)
@@ -146,6 +148,22 @@ func getPrettyPrintBinary(typ BinaryOperatorType) string {
 		return "DIVIDE"
 	case REMAINDER_OPERATOR:
 		return "REMAINDER"
+	case AND_OPERATOR:
+		return "AND"
+	case OR_OPERATOR:
+		return "OR"
+	case EQUAL_OPERATOR:
+		return "EQUAL"
+	case NOT_EQUAL_OPERATOR:
+		return "NOT_EQUAL"
+	case LESS_THAN_OPERATOR:
+		return "LESS_THAN"
+	case LESS_OR_EQUAL_OPERATOR:
+		return "LESS_OR_EQUAL"
+	case GREATER_THAN_OPERATOR:
+		return "GREATER_THAN"
+	case GREATER_OR_EQUAL_OPERATOR:
+		return "GREATER_OR_EQUAL"
 	default:
 		fmt.Println("Unknown binary operator:", typ)
 		os.Exit(1)

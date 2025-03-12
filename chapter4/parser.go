@@ -72,7 +72,21 @@ const (
 	NONE_UNARY_OPERATOR UnaryOperatorType = iota
 	COMPLEMENT_OPERATOR
 	NEGATE_OPERATOR
+	NOT_OPERATOR
 )
+
+func getUnaryOperator(token Token) UnaryOperatorType {
+	switch token.tokenType {
+	case TILDE_TOKEN:
+		return COMPLEMENT_OPERATOR
+	case HYPHEN_TOKEN:
+		return NEGATE_OPERATOR
+	case EXCLAMATION_TOKEN:
+		return NOT_OPERATOR
+	}
+
+	return NONE_UNARY_OPERATOR
+}
 
 /////////////////////////////////////////////////////////////////////////////////
 
@@ -85,6 +99,14 @@ const (
 	MULTIPLY_OPERATOR
 	DIVIDE_OPERATOR
 	REMAINDER_OPERATOR
+	AND_OPERATOR
+	OR_OPERATOR
+	EQUAL_OPERATOR
+	NOT_EQUAL_OPERATOR
+	LESS_THAN_OPERATOR
+	LESS_OR_EQUAL_OPERATOR
+	GREATER_THAN_OPERATOR
+	GREATER_OR_EQUAL_OPERATOR
 )
 
 func getBinaryOperator(token Token) BinaryOperatorType {
@@ -99,6 +121,22 @@ func getBinaryOperator(token Token) BinaryOperatorType {
 		return DIVIDE_OPERATOR
 	case PERCENT_TOKEN:
 		return REMAINDER_OPERATOR
+	case TWO_AMPERSANDS_TOKEN:
+		return AND_OPERATOR
+	case TWO_VERTICAL_BARS_TOKEN:
+		return OR_OPERATOR
+	case TWO_EQUAL_SIGNS_TOKEN:
+		return EQUAL_OPERATOR
+	case EXCLAMATION_EQUAL_TOKEN:
+		return NOT_EQUAL_OPERATOR
+	case LESS_THAN_TOKEN:
+		return LESS_THAN_OPERATOR
+	case LESS_OR_EQUAL_TOKEN:
+		return LESS_OR_EQUAL_OPERATOR
+	case GREATER_THAN_TOKEN:
+		return GREATER_THAN_OPERATOR
+	case GREATER_OR_EQUAL_TOKEN:
+		return GREATER_OR_EQUAL_OPERATOR
 	}
 
 	return NONE_BINARY_OPERATOR
@@ -191,6 +229,22 @@ func getPrecedence(token Token) int {
 		return 45
 	case HYPHEN_TOKEN:
 		return 45
+	case LESS_THAN_TOKEN:
+		return 35
+	case LESS_OR_EQUAL_TOKEN:
+		return 35
+	case GREATER_THAN_TOKEN:
+		return 35
+	case GREATER_OR_EQUAL_TOKEN:
+		return 35
+	case TWO_EQUAL_SIGNS_TOKEN:
+		return 30
+	case EXCLAMATION_EQUAL_TOKEN:
+		return 30
+	case TWO_AMPERSANDS_TOKEN:
+		return 10
+	case TWO_VERTICAL_BARS_TOKEN:
+		return 5
 	default:
 		fmt.Println("unknown token type:", token.tokenType)
 		os.Exit(1)
@@ -208,7 +262,7 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 		integer, tokens := parseInteger(tokens)
 		ex := Constant_Int_Expression{intValue: integer}
 		return &ex, tokens
-	} else if nextToken.tokenType == TILDE_TOKEN || nextToken.tokenType == HYPHEN_TOKEN {
+	} else if nextToken.tokenType == TILDE_TOKEN || nextToken.tokenType == HYPHEN_TOKEN || nextToken.tokenType == EXCLAMATION_TOKEN {
 		unopType, tokens := parseUnaryOperator(tokens)
 		innerExp, tokens := parseFactor(tokens)
 		unExp := Unary_Expression{innerExp: innerExp, unOp: unopType}
@@ -232,18 +286,8 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 
 func parseUnaryOperator(tokens []Token) (UnaryOperatorType, []Token) {
 	unopToken, tokens := takeToken(tokens)
-
-	switch unopToken.tokenType {
-	case TILDE_TOKEN:
-		return COMPLEMENT_OPERATOR, tokens
-	case HYPHEN_TOKEN:
-		return NEGATE_OPERATOR, tokens
-	default:
-		fmt.Println("unknown unary operator:", unopToken.tokenType)
-		os.Exit(1)
-	}
-
-	return NONE_UNARY_OPERATOR, tokens
+	unOpTyp := getUnaryOperator(unopToken)
+	return unOpTyp, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -251,7 +295,6 @@ func parseUnaryOperator(tokens []Token) (UnaryOperatorType, []Token) {
 func parseBinaryOperator(tokens []Token) (BinaryOperatorType, []Token) {
 	binopToken, tokens := takeToken(tokens)
 	binOpTyp := getBinaryOperator(binopToken)
-
 	return binOpTyp, tokens
 }
 
