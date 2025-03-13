@@ -37,6 +37,7 @@ var regexp_less_than *regexp.Regexp = regexp.MustCompile(`<`)
 var regexp_greater_than *regexp.Regexp = regexp.MustCompile(`>`)
 var regexp_less_or_equal *regexp.Regexp = regexp.MustCompile(`<=`)
 var regexp_greater_or_equal *regexp.Regexp = regexp.MustCompile(`>=`)
+var regexp_equal *regexp.Regexp = regexp.MustCompile(`=`)
 
 type TokenEnum int
 
@@ -68,6 +69,7 @@ const (
 	GREATER_THAN_TOKEN
 	LESS_OR_EQUAL_TOKEN
 	GREATER_OR_EQUAL_TOKEN
+	EQUAL_TOKEN
 )
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -99,6 +101,7 @@ var allRegexp = map[TokenEnum]*regexp.Regexp{
 	GREATER_THAN_TOKEN:      regexp_greater_than,
 	LESS_OR_EQUAL_TOKEN:     regexp_less_or_equal,
 	GREATER_OR_EQUAL_TOKEN:  regexp_greater_or_equal,
+	EQUAL_TOKEN:             regexp_equal,
 }
 
 var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{

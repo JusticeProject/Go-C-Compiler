@@ -194,7 +194,7 @@ func (op *Stack_Operand_Asm) getOperandString(sizeBytes int) string {
 
 func getConditionalCodeString(code ConditionalCodeAsm) string {
 	switch code {
-	case EQUAL_CODE_ASM:
+	case IS_EQUAL_CODE_ASM:
 		return "e"
 	case NOT_EQUAL_CODE_ASM:
 		return "ne"

@@ -146,9 +146,35 @@ func (pr *Program) genTacky() Program_Tacky {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (fn *Function) genTacky() Function_Tacky {
-	bodyTac := fn.body.statementToTacky()
-	fnTac := Function_Tacky{name: fn.name, body: bodyTac}
-	return fnTac
+	//bodyTac := fn.body.statementToTacky()
+	//fnTac := Function_Tacky{name: fn.name, body: bodyTac}
+	// TODO:
+	return Function_Tacky{}
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+func (b *Block_Statement) blockToTacky() []Instruction_Tacky {
+	// TODO:
+	return []Instruction_Tacky{}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (b *Block_Declaration) blockToTacky() []Instruction_Tacky {
+	// TODO:
+	return []Instruction_Tacky{}
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+func (d *Declaration) genTacky() []Instruction_Tacky {
+	// TODO:
+	return []Instruction_Tacky{}
 }
 
 //###############################################################################
@@ -163,6 +189,20 @@ func (st *Return_Statement) statementToTacky() []Instruction_Tacky {
 	return instructions
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *Expression_Statement) statementToTacky() []Instruction_Tacky {
+	// TODO:
+	return []Instruction_Tacky{}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *Null_Statement) statementToTacky() []Instruction_Tacky {
+	// TODO:
+	return []Instruction_Tacky{}
+}
+
 //###############################################################################
 //###############################################################################
 //###############################################################################
@@ -170,6 +210,13 @@ func (st *Return_Statement) statementToTacky() []Instruction_Tacky {
 func (exp *Constant_Int_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
 	val := Constant_Value_Tacky{value: exp.intValue}
 	return &val, instructions
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (exp *Variable_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+	// TODO:
+	return nil, []Instruction_Tacky{}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -239,4 +286,11 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		instructions = append(instructions, &instr)
 		return &dst, instructions
 	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (exp *Assignment_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+	// TODO:
+	return nil, []Instruction_Tacky{}
 }

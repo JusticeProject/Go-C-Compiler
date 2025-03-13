@@ -20,7 +20,33 @@ type Program struct {
 
 type Function struct {
 	name string
-	body Statement
+	body []Block_Item
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+type Block_Item interface {
+	blockToTacky() []Instruction_Tacky
+	getPrettyPrintLines() []string
+}
+
+type Block_Statement struct {
+	st Statement
+}
+
+type Block_Declaration struct {
+	decl Declaration
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+type Declaration struct {
+	name        string
+	initializer Expression
 }
 
 //###############################################################################
@@ -32,10 +58,17 @@ type Statement interface {
 	getPrettyPrintLines() []string
 }
 
-/////////////////////////////////////////////////////////////////////////////////
-
 type Return_Statement struct {
 	exp Expression
+}
+
+type Expression_Statement struct {
+	exp Expression
+}
+
+// example: while (true) {;}
+// the ; is a null statement
+type Null_Statement struct {
 }
 
 //###############################################################################
@@ -51,6 +84,10 @@ type Constant_Int_Expression struct {
 	intValue int32
 }
 
+type Variable_Expression struct {
+	name string
+}
+
 type Unary_Expression struct {
 	unOp     UnaryOperatorType
 	innerExp Expression
@@ -60,6 +97,11 @@ type Binary_Expression struct {
 	binOp    BinaryOperatorType
 	firstExp Expression
 	secExp   Expression
+}
+
+type Assignment_Expression struct {
+	lvalue   Expression
+	rightExp Expression
 }
 
 //###############################################################################
@@ -101,12 +143,13 @@ const (
 	REMAINDER_OPERATOR
 	AND_OPERATOR
 	OR_OPERATOR
-	EQUAL_OPERATOR
+	IS_EQUAL_OPERATOR
 	NOT_EQUAL_OPERATOR
 	LESS_THAN_OPERATOR
 	LESS_OR_EQUAL_OPERATOR
 	GREATER_THAN_OPERATOR
 	GREATER_OR_EQUAL_OPERATOR
+	ASSIGNMENT_OPERATOR
 )
 
 func getBinaryOperator(token Token) BinaryOperatorType {
@@ -126,7 +169,7 @@ func getBinaryOperator(token Token) BinaryOperatorType {
 	case TWO_VERTICAL_BARS_TOKEN:
 		return OR_OPERATOR
 	case TWO_EQUAL_SIGNS_TOKEN:
-		return EQUAL_OPERATOR
+		return IS_EQUAL_OPERATOR
 	case EXCLAMATION_EQUAL_TOKEN:
 		return NOT_EQUAL_OPERATOR
 	case LESS_THAN_TOKEN:
@@ -137,6 +180,8 @@ func getBinaryOperator(token Token) BinaryOperatorType {
 		return GREATER_THAN_OPERATOR
 	case GREATER_OR_EQUAL_TOKEN:
 		return GREATER_OR_EQUAL_OPERATOR
+	case EQUAL_TOKEN:
+		return ASSIGNMENT_OPERATOR
 	}
 
 	return NONE_BINARY_OPERATOR
@@ -180,20 +225,78 @@ func parseFunction(tokens []Token) (Function, []Token) {
 	_, tokens = expect(VOID_KEYWORD_TOKEN, tokens)
 	_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
 	_, tokens = expect(OPEN_BRACE_TOKEN, tokens)
-	st, tokens := parseStatement(tokens)
+
+	body := []Block_Item{}
+	for peekToken(tokens).tokenType != CLOSE_BRACE_TOKEN {
+		var block Block_Item
+		block, tokens = parseBlockItem(tokens)
+		body = append(body, block)
+	}
+
 	_, tokens = expect(CLOSE_BRACE_TOKEN, tokens)
-	fn := Function{name: id, body: st}
+	fn := Function{name: id, body: body}
 	return fn, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseStatement(tokens []Token) (Statement, []Token) {
-	_, tokens = expect(RETURN_KEYWORD_TOKEN, tokens)
-	ex, tokens := parseExpression(tokens, 0)
+func parseBlockItem(tokens []Token) (Block_Item, []Token) {
+	firstToken := peekToken(tokens)
+	if firstToken.tokenType == INT_KEYWORD_TOKEN {
+		// it's a declaration
+		decl, tokens := parseDeclaration(tokens)
+		declBlock := Block_Declaration{decl}
+		return &declBlock, tokens
+	} else {
+		// it's a statement
+		st, tokens := parseStatement(tokens)
+		stBlock := Block_Statement{st}
+		return &stBlock, tokens
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseDeclaration(tokens []Token) (Declaration, []Token) {
+	// TODO: need to handle other data types
+	_, tokens = expect(INT_KEYWORD_TOKEN, tokens)
+	var name string
+	name, tokens = parseIdentifier(tokens)
+	decl := Declaration{name: name}
+
+	if peekToken(tokens).tokenType == EQUAL_TOKEN {
+		// it has an initializer
+		_, tokens = expect(EQUAL_TOKEN, tokens)
+		var exp Expression
+		exp, tokens = parseExpression(tokens, 0)
+		decl.initializer = exp
+	}
+
 	_, tokens = expect(SEMICOLON_TOKEN, tokens)
-	st := Return_Statement{exp: ex}
-	return &st, tokens
+
+	return decl, tokens
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseStatement(tokens []Token) (Statement, []Token) {
+	nextToken := peekToken(tokens)
+
+	if nextToken.tokenType == RETURN_KEYWORD_TOKEN {
+		_, tokens = expect(RETURN_KEYWORD_TOKEN, tokens)
+		ex, tokens := parseExpression(tokens, 0)
+		_, tokens = expect(SEMICOLON_TOKEN, tokens)
+		st := Return_Statement{exp: ex}
+		return &st, tokens
+	} else if nextToken.tokenType == SEMICOLON_TOKEN {
+		_, tokens = expect(SEMICOLON_TOKEN, tokens)
+		return &Null_Statement{}, tokens
+	} else {
+		var exp Expression
+		exp, tokens = parseExpression(tokens, 0)
+		_, tokens = expect(SEMICOLON_TOKEN, tokens)
+		return &Expression_Statement{exp: exp}, tokens
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -203,11 +306,18 @@ func parseExpression(tokens []Token, minPrecedence int) (Expression, []Token) {
 	nextToken := peekToken(tokens)
 
 	for getBinaryOperator(nextToken) != NONE_BINARY_OPERATOR && getPrecedence(nextToken) >= minPrecedence {
-		var binOpType BinaryOperatorType
-		binOpType, tokens = parseBinaryOperator(tokens)
-		var right Expression
-		right, tokens = parseExpression(tokens, getPrecedence(nextToken)+1)
-		left = &Binary_Expression{binOp: binOpType, firstExp: left, secExp: right}
+		if nextToken.tokenType == EQUAL_TOKEN {
+			_, tokens = expect(EQUAL_TOKEN, tokens)
+			var right Expression
+			right, tokens = parseExpression(tokens, getPrecedence(nextToken))
+			left = &Assignment_Expression{lvalue: left, rightExp: right}
+		} else {
+			var binOpType BinaryOperatorType
+			binOpType, tokens = parseBinaryOperator(tokens)
+			var right Expression
+			right, tokens = parseExpression(tokens, getPrecedence(nextToken)+1)
+			left = &Binary_Expression{binOp: binOpType, firstExp: left, secExp: right}
+		}
 		nextToken = peekToken(tokens)
 	}
 
@@ -245,6 +355,8 @@ func getPrecedence(token Token) int {
 		return 10
 	case TWO_VERTICAL_BARS_TOKEN:
 		return 5
+	case EQUAL_TOKEN:
+		return 1
 	default:
 		fmt.Println("unknown token type:", token.tokenType)
 		os.Exit(1)
@@ -262,6 +374,10 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 		integer, tokens := parseInteger(tokens)
 		ex := Constant_Int_Expression{intValue: integer}
 		return &ex, tokens
+	} else if nextToken.tokenType == IDENTIFIER_TOKEN {
+		name, tokens := parseIdentifier(tokens)
+		v := Variable_Expression{name}
+		return &v, tokens
 	} else if nextToken.tokenType == TILDE_TOKEN || nextToken.tokenType == HYPHEN_TOKEN || nextToken.tokenType == EXCLAMATION_TOKEN {
 		unopType, tokens := parseUnaryOperator(tokens)
 		innerExp, tokens := parseFactor(tokens)

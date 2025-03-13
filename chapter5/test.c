@@ -1,3 +1,6 @@
 int main(void) {
-    return (1 == 2) || !(4 >= 4) || (1 < 2 && 4 > 3);
+    int a;
+    a = 2;
+    int b = 3;
+    return a * b;
 }

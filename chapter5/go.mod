@@ -1,3 +1,3 @@
-module chapter4
+module chapter5
 
 go 1.24.0

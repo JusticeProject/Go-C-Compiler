@@ -204,7 +204,7 @@ type ConditionalCodeAsm int
 
 const (
 	NONE_CODE_ASM ConditionalCodeAsm = iota
-	EQUAL_CODE_ASM
+	IS_EQUAL_CODE_ASM
 	NOT_EQUAL_CODE_ASM
 	LESS_THAN_CODE_ASM
 	LESS_OR_EQUAL_CODE_ASM
@@ -214,8 +214,8 @@ const (
 
 func convertBinaryOpToCondition(binOp BinaryOperatorType) ConditionalCodeAsm {
 	switch binOp {
-	case EQUAL_OPERATOR:
-		return EQUAL_CODE_ASM
+	case IS_EQUAL_OPERATOR:
+		return IS_EQUAL_CODE_ASM
 	case NOT_EQUAL_OPERATOR:
 		return NOT_EQUAL_CODE_ASM
 	case LESS_THAN_OPERATOR:
@@ -297,7 +297,7 @@ func (instr *Unary_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 	if instr.unOp == NOT_OPERATOR {
 		cmp := Compare_Instruction_Asm{op1: &Immediate_Int_Operand_Asm{0}, op2: instr.src.valueToAsm()}
 		mov := Mov_Instruction_Asm{src: &Immediate_Int_Operand_Asm{0}, dst: instr.dst.valueToAsm()}
-		setC := Set_Conditional_Instruction_Asm{code: EQUAL_CODE_ASM, dst: instr.dst.valueToAsm()}
+		setC := Set_Conditional_Instruction_Asm{code: IS_EQUAL_CODE_ASM, dst: instr.dst.valueToAsm()}
 
 		instructions := []Instruction_Asm{&cmp, &mov, &setC}
 		return instructions
@@ -339,7 +339,7 @@ func (instr *Binary_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 		secondMov := Mov_Instruction_Asm{src: &Register_Operand_Asm{DX_REGISTER_ASM}, dst: instr.dst.valueToAsm()}
 		instructions := []Instruction_Asm{&firstMov, &cdq, &idiv, &secondMov}
 		return instructions
-	} else if instr.binOp == EQUAL_OPERATOR || instr.binOp == NOT_EQUAL_OPERATOR || instr.binOp == LESS_THAN_OPERATOR ||
+	} else if instr.binOp == IS_EQUAL_OPERATOR || instr.binOp == NOT_EQUAL_OPERATOR || instr.binOp == LESS_THAN_OPERATOR ||
 		instr.binOp == LESS_OR_EQUAL_OPERATOR || instr.binOp == GREATER_THAN_OPERATOR || instr.binOp == GREATER_OR_EQUAL_OPERATOR {
 		cmp := Compare_Instruction_Asm{op1: instr.src2.valueToAsm(), op2: instr.src1.valueToAsm()}
 		mov := Mov_Instruction_Asm{src: &Immediate_Int_Operand_Asm{0}, dst: instr.dst.valueToAsm()}
@@ -372,7 +372,7 @@ func (instr *Jump_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 
 func (instr *Jump_If_Zero_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 	cmp := Compare_Instruction_Asm{op1: &Immediate_Int_Operand_Asm{0}, op2: instr.condition.valueToAsm()}
-	jmpC := Jump_Conditional_Instruction_Asm{code: EQUAL_CODE_ASM, target: instr.target}
+	jmpC := Jump_Conditional_Instruction_Asm{code: IS_EQUAL_CODE_ASM, target: instr.target}
 	return []Instruction_Asm{&cmp, &jmpC}
 }
 

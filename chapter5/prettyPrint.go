@@ -66,27 +66,88 @@ func (f *Function) getPrettyPrintLines() []string {
 	lines := []string{"Function("}
 	lines = append(lines, "name="+string(f.name)+",")
 	lines = append(lines, "body=")
-	moreLines := f.body.getPrettyPrintLines()
-	lines = append(lines, moreLines...)
+
+	for _, block := range f.body {
+		moreLines := block.getPrettyPrintLines()
+		lines = append(lines, moreLines...)
+	}
+
 	lines = append(lines, ")")
 	return lines
 }
 
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+func (b *Block_Statement) getPrettyPrintLines() []string {
+	return b.st.getPrettyPrintLines()
+}
+
 /////////////////////////////////////////////////////////////////////////////////
+
+func (b *Block_Declaration) getPrettyPrintLines() []string {
+	return b.decl.getPrettyPrintLines()
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+func (d *Declaration) getPrettyPrintLines() []string {
+	lines := []string{"DECLARATION("}
+	lines = append(lines, "name="+string(d.name)+",")
+	lines = append(lines, "initializer=")
+	if d.initializer != nil {
+		moreLines := d.initializer.getPrettyPrintLines()
+		lines = append(lines, moreLines...)
+	}
+
+	lines = append(lines, "),")
+	return lines
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
 
 func (s *Return_Statement) getPrettyPrintLines() []string {
 	lines := []string{"RETURN_STATEMENT("}
 	moreLines := s.exp.getPrettyPrintLines()
 	lines = append(lines, moreLines...)
-	lines = append(lines, ")")
+	lines = append(lines, "),")
 	return lines
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (s *Expression_Statement) getPrettyPrintLines() []string {
+	lines := []string{"EXPRESSION_STATEMENT("}
+	moreLines := s.exp.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+	lines = append(lines, "),")
+	return lines
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (s *Null_Statement) getPrettyPrintLines() []string {
+	return []string{"NULL_STATEMENT(),"}
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
 func (e *Constant_Int_Expression) getPrettyPrintLines() []string {
 	line := "CONSTANT_INT_EXPRESSION" + "(" + strconv.FormatInt(int64(e.intValue), 10) + ")"
 	return []string{line}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (e *Variable_Expression) getPrettyPrintLines() []string {
+	return []string{"VARIABLE_EXPRESSION(" + e.name + ")"}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -117,6 +178,22 @@ func (e *Binary_Expression) getPrettyPrintLines() []string {
 }
 
 /////////////////////////////////////////////////////////////////////////////////
+
+func (e *Assignment_Expression) getPrettyPrintLines() []string {
+	lines := []string{"ASSIGNMENT_EXPRESSION("}
+	lines = append(lines, "lvalue=")
+	moreLines := e.lvalue.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+	lines = append(lines, "rightExp=")
+	moreLines = e.rightExp.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+	lines = append(lines, ")")
+	return lines
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
 
 func getPrettyPrintUnary(typ UnaryOperatorType) string {
 	switch typ {
@@ -152,8 +229,8 @@ func getPrettyPrintBinary(typ BinaryOperatorType) string {
 		return "AND"
 	case OR_OPERATOR:
 		return "OR"
-	case EQUAL_OPERATOR:
-		return "EQUAL"
+	case IS_EQUAL_OPERATOR:
+		return "IS_EQUAL"
 	case NOT_EQUAL_OPERATOR:
 		return "NOT_EQUAL"
 	case LESS_THAN_OPERATOR:
