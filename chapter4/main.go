@@ -126,6 +126,8 @@ func doLinux() {
 		os.Exit(1)
 	}
 
+	fmt.Println("binary file created:", binaryFilename)
+
 	// remove the assembly file
 	err = os.Remove(assemblyFilename)
 	if err != nil {

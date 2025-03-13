@@ -15,6 +15,15 @@ func makeTempVarName() string {
 	return "tmp." + strconv.FormatInt(tempVarCounter, 10)
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+
+var labelCounter int64 = -1
+
+func makeLabelName(name string) string {
+	labelCounter++
+	return name + strconv.FormatInt(labelCounter, 10)
+}
+
 //###############################################################################
 //###############################################################################
 //###############################################################################
@@ -61,6 +70,39 @@ type Binary_Instruction_Tacky struct {
 	src1  Value_Tacky
 	src2  Value_Tacky
 	dst   Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Copy_Instruction_Tacky struct {
+	src Value_Tacky
+	dst Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Jump_Instruction_Tacky struct {
+	target string
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Jump_If_Zero_Instruction_Tacky struct {
+	condition Value_Tacky
+	target    string
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Jump_If_Not_Zero_Instruction_Tacky struct {
+	condition Value_Tacky
+	target    string
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Label_Instruction_Tacky struct {
+	name string
 }
 
 //###############################################################################
@@ -145,11 +187,56 @@ func (exp *Unary_Expression) expToTacky(instructions []Instruction_Tacky) (Value
 /////////////////////////////////////////////////////////////////////////////////
 
 func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	src1, instructions := exp.firstExp.expToTacky(instructions)
-	src2, instructions := exp.secExp.expToTacky(instructions)
-	dstName := makeTempVarName()
-	dst := Variable_Value_Tacky{name: dstName}
-	instr := Binary_Instruction_Tacky{binOp: exp.binOp, src1: src1, src2: src2, dst: &dst}
-	instructions = append(instructions, &instr)
-	return &dst, instructions
+	// some operators can short-circuit on the first expression, so we handle them differently
+	if exp.binOp == AND_OPERATOR {
+		v1, instructions := exp.firstExp.expToTacky(instructions)
+		false_label := makeLabelName("and_false")
+		j1 := Jump_If_Zero_Instruction_Tacky{condition: v1, target: false_label}
+		instructions = append(instructions, &j1)
+		v2, instructions := exp.secExp.expToTacky(instructions)
+		j2 := Jump_If_Zero_Instruction_Tacky{condition: v2, target: false_label}
+		instructions = append(instructions, &j2)
+		result := Variable_Value_Tacky{makeTempVarName()}
+		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{1}, dst: &result}
+		instructions = append(instructions, &cp1)
+		end := makeLabelName("end")
+		j3 := Jump_Instruction_Tacky{end}
+		instructions = append(instructions, &j3)
+		lb1 := Label_Instruction_Tacky{false_label}
+		instructions = append(instructions, &lb1)
+		cp2 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{0}, dst: &result}
+		instructions = append(instructions, &cp2)
+		lb2 := Label_Instruction_Tacky{end}
+		instructions = append(instructions, &lb2)
+		return &result, instructions
+	} else if exp.binOp == OR_OPERATOR {
+		v1, instructions := exp.firstExp.expToTacky(instructions)
+		true_label := makeLabelName("or_true")
+		j1 := Jump_If_Not_Zero_Instruction_Tacky{condition: v1, target: true_label}
+		instructions = append(instructions, &j1)
+		v2, instructions := exp.secExp.expToTacky(instructions)
+		j2 := Jump_If_Not_Zero_Instruction_Tacky{condition: v2, target: true_label}
+		instructions = append(instructions, &j2)
+		result := Variable_Value_Tacky{makeTempVarName()}
+		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{0}, dst: &result}
+		instructions = append(instructions, &cp1)
+		end := makeLabelName("end")
+		j3 := Jump_Instruction_Tacky{end}
+		instructions = append(instructions, &j3)
+		lb1 := Label_Instruction_Tacky{true_label}
+		instructions = append(instructions, &lb1)
+		cp2 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{1}, dst: &result}
+		instructions = append(instructions, &cp2)
+		lb2 := Label_Instruction_Tacky{end}
+		instructions = append(instructions, &lb2)
+		return &result, instructions
+	} else {
+		src1, instructions := exp.firstExp.expToTacky(instructions)
+		src2, instructions := exp.secExp.expToTacky(instructions)
+		dstName := makeTempVarName()
+		dst := Variable_Value_Tacky{dstName}
+		instr := Binary_Instruction_Tacky{binOp: exp.binOp, src1: src1, src2: src2, dst: &dst}
+		instructions = append(instructions, &instr)
+		return &dst, instructions
+	}
 }
