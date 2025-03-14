@@ -187,6 +187,15 @@ func getBinaryOperator(token Token) BinaryOperatorType {
 	return NONE_BINARY_OPERATOR
 }
 
+func isBinaryOperator(token Token) bool {
+	binOp := getBinaryOperator(token)
+	if binOp == NONE_BINARY_OPERATOR {
+		return false
+	} else {
+		return true
+	}
+}
+
 //###############################################################################
 //###############################################################################
 //###############################################################################
@@ -242,6 +251,7 @@ func parseFunction(tokens []Token) (Function, []Token) {
 
 func parseBlockItem(tokens []Token) (Block_Item, []Token) {
 	firstToken := peekToken(tokens)
+	// TODO: need to handle other data types
 	if firstToken.tokenType == INT_KEYWORD_TOKEN {
 		// it's a declaration
 		decl, tokens := parseDeclaration(tokens)
@@ -305,7 +315,7 @@ func parseExpression(tokens []Token, minPrecedence int) (Expression, []Token) {
 	left, tokens := parseFactor(tokens)
 	nextToken := peekToken(tokens)
 
-	for getBinaryOperator(nextToken) != NONE_BINARY_OPERATOR && getPrecedence(nextToken) >= minPrecedence {
+	for isBinaryOperator(nextToken) && getPrecedence(nextToken) >= minPrecedence {
 		if nextToken.tokenType == EQUAL_TOKEN {
 			_, tokens = expect(EQUAL_TOKEN, tokens)
 			var right Expression
