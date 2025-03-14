@@ -150,10 +150,19 @@ func (pr *Program) genTacky() Program_Tacky {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (fn *Function) genTacky() Function_Tacky {
-	//bodyTac := fn.body.statementToTacky()
-	//fnTac := Function_Tacky{name: fn.name, body: bodyTac}
-	// TODO:
-	return Function_Tacky{}
+	bodyTac := []Instruction_Tacky{}
+
+	for _, block := range fn.body {
+		instructions := block.blockToTacky()
+		bodyTac = append(bodyTac, instructions...)
+	}
+
+	// Add a return statement to the end of every function just in case the original source didn't have one.
+	// If it already had a return statement then no big deal becuase this new ret instruction will never run.
+	ret := Return_Instruction_Tacky{&Constant_Value_Tacky{0}}
+	bodyTac = append(bodyTac, &ret)
+
+	return Function_Tacky{name: fn.name, body: bodyTac}
 }
 
 //###############################################################################
@@ -161,24 +170,34 @@ func (fn *Function) genTacky() Function_Tacky {
 //###############################################################################
 
 func (b *Block_Statement) blockToTacky() []Instruction_Tacky {
-	// TODO:
-	return []Instruction_Tacky{}
+	return b.st.statementToTacky()
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (b *Block_Declaration) blockToTacky() []Instruction_Tacky {
-	// TODO:
-	return []Instruction_Tacky{}
+	return b.decl.declToTacky()
 }
 
 //###############################################################################
 //###############################################################################
 //###############################################################################
 
-func (d *Declaration) genTacky() []Instruction_Tacky {
-	// TODO:
-	return []Instruction_Tacky{}
+func (d *Declaration) declToTacky() []Instruction_Tacky {
+	if d.initializer == nil {
+		// no instructions needed
+		return []Instruction_Tacky{}
+	} else {
+		// get the instructions for the initializer
+		instructions := []Instruction_Tacky{}
+		result, instructions := d.initializer.expToTacky(instructions)
+
+		// assign the value from the initializer to the declared variable
+		v := Variable_Value_Tacky{d.name}
+		cp := Copy_Instruction_Tacky{result, &v}
+		instructions = append(instructions, &cp)
+		return instructions
+	}
 }
 
 //###############################################################################
@@ -196,14 +215,14 @@ func (st *Return_Statement) statementToTacky() []Instruction_Tacky {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (st *Expression_Statement) statementToTacky() []Instruction_Tacky {
-	// TODO:
-	return []Instruction_Tacky{}
+	instructions := []Instruction_Tacky{}
+	_, instructions = st.exp.expToTacky(instructions)
+	return instructions
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (st *Null_Statement) statementToTacky() []Instruction_Tacky {
-	// TODO:
 	return []Instruction_Tacky{}
 }
 
@@ -219,8 +238,7 @@ func (exp *Constant_Int_Expression) expToTacky(instructions []Instruction_Tacky)
 /////////////////////////////////////////////////////////////////////////////////
 
 func (exp *Variable_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	// TODO:
-	return nil, []Instruction_Tacky{}
+	return &Variable_Value_Tacky{exp.name}, instructions
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -295,6 +313,15 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 /////////////////////////////////////////////////////////////////////////////////
 
 func (exp *Assignment_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	// TODO:
-	return nil, []Instruction_Tacky{}
+	// evaluate the right side of the expression
+	result, instructions := exp.rightExp.expToTacky(instructions)
+
+	varExp, _ := exp.lvalue.(*Variable_Expression)
+	v := Variable_Value_Tacky{varExp.name}
+
+	// store the right side of the expression in the lvalue
+	cp := Copy_Instruction_Tacky{result, &v}
+	instructions = append(instructions, &cp)
+
+	return &v, instructions
 }
