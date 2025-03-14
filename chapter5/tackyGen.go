@@ -8,11 +8,15 @@ import "strconv"
 
 var tempVarCounter int64 = -1
 
-func makeTempVarName() string {
+func makeTempVarName(prefix string) string {
 	// TODO: I could pass in the name of the function so the variables would be named something
 	// like main.0, main.1, addFunction.2, etc.
 	tempVarCounter++
-	return "tmp." + strconv.FormatInt(tempVarCounter, 10)
+	if len(prefix) > 0 {
+		return prefix + "." + strconv.FormatInt(tempVarCounter, 10)
+	} else {
+		return "tmp." + strconv.FormatInt(tempVarCounter, 10)
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -223,7 +227,7 @@ func (exp *Variable_Expression) expToTacky(instructions []Instruction_Tacky) (Va
 
 func (exp *Unary_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
 	src, instructions := exp.innerExp.expToTacky(instructions)
-	dstName := makeTempVarName()
+	dstName := makeTempVarName("")
 	dst := Variable_Value_Tacky{name: dstName}
 	// TODO: will I need a helper function to convert the Unary Operator type to its TACKY equivalent?
 	instr := Unary_Instruction_Tacky{unOp: exp.unOp, src: src, dst: &dst}
@@ -243,7 +247,7 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		v2, instructions := exp.secExp.expToTacky(instructions)
 		j2 := Jump_If_Zero_Instruction_Tacky{condition: v2, target: false_label}
 		instructions = append(instructions, &j2)
-		result := Variable_Value_Tacky{makeTempVarName()}
+		result := Variable_Value_Tacky{makeTempVarName("")}
 		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{1}, dst: &result}
 		instructions = append(instructions, &cp1)
 		end := makeLabelName("end")
@@ -264,7 +268,7 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		v2, instructions := exp.secExp.expToTacky(instructions)
 		j2 := Jump_If_Not_Zero_Instruction_Tacky{condition: v2, target: true_label}
 		instructions = append(instructions, &j2)
-		result := Variable_Value_Tacky{makeTempVarName()}
+		result := Variable_Value_Tacky{makeTempVarName("")}
 		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{0}, dst: &result}
 		instructions = append(instructions, &cp1)
 		end := makeLabelName("end")
@@ -280,7 +284,7 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 	} else {
 		src1, instructions := exp.firstExp.expToTacky(instructions)
 		src2, instructions := exp.secExp.expToTacky(instructions)
-		dstName := makeTempVarName()
+		dstName := makeTempVarName("")
 		dst := Variable_Value_Tacky{dstName}
 		instr := Binary_Instruction_Tacky{binOp: exp.binOp, src1: src1, src2: src2, dst: &dst}
 		instructions = append(instructions, &instr)

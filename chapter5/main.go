@@ -27,9 +27,10 @@ func doLinux() {
 		fmt.Println("Usage: goc /path/to/source.c")
 		fmt.Println("Options:")
 		fmt.Println("--lex will run lexer but stop before parsing, no output files are produced")
-		fmt.Println("--parse will run lexer and parser but stop before tacky generation, no output files are produced")
-		fmt.Println("--tacky will run lexer, parser, tacky generation but stop before assembly generation, no output files are produced")
-		fmt.Println("--codegen will run lexer, parser, and assembly generation but stop before code emission, no output files are produced")
+		fmt.Println("--parse will run lexer and parser but stop before semantic analysis, no output files are produced")
+		fmt.Println("--validate will run lexer, parser, semantic analysis but stop before tacky generation, no output files are produced")
+		fmt.Println("--tacky will run lexer, parser, semantic analysis, tacky generation but stop before assembly generation, no output files are produced")
+		fmt.Println("--codegen will run up to assembly generation but stop before code emission, no output files are produced")
 		fmt.Println("-S will emit an assembly file but will not assemble or link it")
 		os.Exit(1)
 	}
@@ -42,6 +43,7 @@ func doLinux() {
 	fmt.Println("found inputFilename", inputFilename)
 
 	runParser := true
+	runSemanticAnalysis := true
 	runTackyGeneration := true
 	runAssemblyGeneration := true
 	runCodeEmission := true
@@ -54,6 +56,7 @@ func doLinux() {
 		case "--lex":
 			fmt.Println("stopping after lexer")
 			runParser = false
+			runSemanticAnalysis = false
 			runTackyGeneration = false
 			runAssemblyGeneration = false
 			runCodeEmission = false
@@ -61,6 +64,15 @@ func doLinux() {
 		case "--parse":
 			fmt.Println("stopping after parser")
 			runParser = true
+			runSemanticAnalysis = false
+			runTackyGeneration = false
+			runAssemblyGeneration = false
+			runCodeEmission = false
+			produceExecutable = false
+		case "--validate":
+			fmt.Println("stopping after semantic analysis")
+			runParser = true
+			runSemanticAnalysis = true
 			runTackyGeneration = false
 			runAssemblyGeneration = false
 			runCodeEmission = false
@@ -68,6 +80,7 @@ func doLinux() {
 		case "--tacky":
 			fmt.Println("stopping after tacky genration")
 			runParser = true
+			runSemanticAnalysis = true
 			runTackyGeneration = true
 			runAssemblyGeneration = false
 			runCodeEmission = false
@@ -75,6 +88,7 @@ func doLinux() {
 		case "--codegen":
 			fmt.Println("stopping after assembly generation")
 			runParser = true
+			runSemanticAnalysis = true
 			runTackyGeneration = true
 			runAssemblyGeneration = true
 			runCodeEmission = false
@@ -82,6 +96,7 @@ func doLinux() {
 		case "-S":
 			fmt.Println("stopping after code emission")
 			runParser = true
+			runSemanticAnalysis = true
 			runTackyGeneration = true
 			runAssemblyGeneration = true
 			runCodeEmission = true
@@ -111,7 +126,7 @@ func doLinux() {
 
 	// do the compilation
 	assemblyFilename := strings.TrimSuffix(inputFilename, ".c") + ".s"
-	doCompilerSteps(fileContents, runParser, runTackyGeneration, runAssemblyGeneration, runCodeEmission, assemblyFilename)
+	doCompilerSteps(fileContents, runParser, runSemanticAnalysis, runTackyGeneration, runAssemblyGeneration, runCodeEmission, assemblyFilename)
 
 	if !produceExecutable {
 		os.Exit(0)
@@ -143,12 +158,12 @@ func doWindows() {
 
 	contents := loadFile(filename)
 	assemblyFilename := strings.TrimSuffix(filename, ".c") + ".s"
-	doCompilerSteps(contents, true, true, true, true, assemblyFilename)
+	doCompilerSteps(contents, true, true, true, true, true, assemblyFilename)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func doCompilerSteps(fileContents string, runParser bool, runTackyGeneration bool,
+func doCompilerSteps(fileContents string, runParser bool, runSemanticAnalysis bool, runTackyGeneration bool,
 	runAssemblyGeneration bool, runCodeEmission bool, assemblyFilename string) {
 
 	fmt.Println("running compiler with fileContents:")
@@ -168,6 +183,15 @@ func doCompilerSteps(fileContents string, runParser bool, runTackyGeneration boo
 	// run parser, get the Abstract Syntax Tree
 	fmt.Println("running parser")
 	ast := doParser(tokens)
+
+	if !runSemanticAnalysis {
+		fmt.Println("not running semantic analysis, done")
+		os.Exit(0)
+	}
+
+	// run semantic analysis and update the Abstract Syntax Tree
+	fmt.Println("running semantic analysis")
+	ast = doSemanticAnalysis(ast)
 
 	if !runTackyGeneration {
 		fmt.Println("not running tacky generation, done")
