@@ -14,18 +14,18 @@ func prettyPrint(pr Program) {
 	numTabs := 0
 	prevEndOfLine := true
 	for _, line := range lines {
+		if isRightIndent(line) {
+			numTabs++
+			continue
+		} else if isLeftIndent(line) {
+			numTabs--
+			continue
+		}
+
 		if prevEndOfLine {
 			prevEndOfLine = printWithTabs(line, numTabs)
 		} else {
 			prevEndOfLine = printWithTabs(line, 0)
-		}
-
-		lastChar := line[len(line)-1]
-
-		if lastChar == '(' {
-			numTabs++
-		} else if lastChar == ')' {
-			numTabs--
 		}
 	}
 }
@@ -52,10 +52,45 @@ func printWithTabs(text string, numTabs int) bool {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func doRightIndent() string {
+	return "->"
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func doLeftIndent() string {
+	return "<-"
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func isRightIndent(text string) bool {
+	if text == "->" {
+		return true
+	} else {
+		return false
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func isLeftIndent(text string) bool {
+	if text == "<-" {
+		return true
+	} else {
+		return false
+	}
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
 func (p *Program) getPrettyPrintLines() []string {
-	lines := []string{"Program("}
+	lines := []string{"Program(", doRightIndent()}
 	newLines := p.fn.getPrettyPrintLines()
 	lines = append(lines, newLines...)
+	lines = append(lines, doLeftIndent())
 	lines = append(lines, ")")
 	return lines
 }
@@ -63,7 +98,7 @@ func (p *Program) getPrettyPrintLines() []string {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (f *Function) getPrettyPrintLines() []string {
-	lines := []string{"Function("}
+	lines := []string{"Function(", doRightIndent()}
 	lines = append(lines, "name="+string(f.name)+",")
 	lines = append(lines, "body=")
 
@@ -72,6 +107,7 @@ func (f *Function) getPrettyPrintLines() []string {
 		lines = append(lines, moreLines...)
 	}
 
+	lines = append(lines, doLeftIndent())
 	lines = append(lines, ")")
 	return lines
 }
@@ -95,15 +131,18 @@ func (b *Block_Declaration) getPrettyPrintLines() []string {
 //###############################################################################
 
 func (d *Declaration) getPrettyPrintLines() []string {
-	lines := []string{"DECLARATION("}
+	lines := []string{"DECLARATION(", doRightIndent()}
 	lines = append(lines, "name="+string(d.name)+",")
 	lines = append(lines, "initializer=")
-	if d.initializer != nil {
+	if d.initializer == nil {
+		lines = append(lines, "NONE")
+	} else {
 		moreLines := d.initializer.getPrettyPrintLines()
 		lines = append(lines, moreLines...)
 	}
 
-	lines = append(lines, "),")
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
 	return lines
 }
 
@@ -112,27 +151,29 @@ func (d *Declaration) getPrettyPrintLines() []string {
 //###############################################################################
 
 func (s *Return_Statement) getPrettyPrintLines() []string {
-	lines := []string{"RETURN_STATEMENT("}
+	lines := []string{"RETURN_STATEMENT(", doRightIndent()}
 	moreLines := s.exp.getPrettyPrintLines()
 	lines = append(lines, moreLines...)
-	lines = append(lines, "),")
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
 	return lines
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (s *Expression_Statement) getPrettyPrintLines() []string {
-	lines := []string{"EXPRESSION_STATEMENT("}
+	lines := []string{"EXPRESSION_STATEMENT(", doRightIndent()}
 	moreLines := s.exp.getPrettyPrintLines()
 	lines = append(lines, moreLines...)
-	lines = append(lines, "),")
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
 	return lines
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (s *Null_Statement) getPrettyPrintLines() []string {
-	return []string{"NULL_STATEMENT(),"}
+	return []string{"NULL_STATEMENT()"}
 }
 
 //###############################################################################
@@ -153,11 +194,10 @@ func (e *Variable_Expression) getPrettyPrintLines() []string {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (e *Unary_Expression) getPrettyPrintLines() []string {
-	lines := []string{}
-	line := "UNARY_EXPRESSION_" + getPrettyPrintUnary(e.unOp) + "("
-	lines = append(lines, line)
+	lines := []string{"UNARY_EXPRESSION_" + getPrettyPrintUnary(e.unOp) + "(", doRightIndent()}
 	moreLines := e.innerExp.getPrettyPrintLines()
 	lines = append(lines, moreLines...)
+	lines = append(lines, doLeftIndent())
 	lines = append(lines, ")")
 	return lines
 }
@@ -165,14 +205,13 @@ func (e *Unary_Expression) getPrettyPrintLines() []string {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (e *Binary_Expression) getPrettyPrintLines() []string {
-	lines := []string{}
-	line := "BINARY_EXPRESSION_" + getPrettyPrintBinary(e.binOp) + "("
-	lines = append(lines, line)
+	lines := []string{"BINARY_EXPRESSION_" + getPrettyPrintBinary(e.binOp) + "(", doRightIndent()}
 	moreLines := e.firstExp.getPrettyPrintLines()
 	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
 	lines = append(lines, moreLines...)
 	moreLines = e.secExp.getPrettyPrintLines()
 	lines = append(lines, moreLines...)
+	lines = append(lines, doLeftIndent())
 	lines = append(lines, ")")
 	return lines
 }
@@ -180,13 +219,15 @@ func (e *Binary_Expression) getPrettyPrintLines() []string {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (e *Assignment_Expression) getPrettyPrintLines() []string {
-	lines := []string{"ASSIGNMENT_EXPRESSION("}
+	lines := []string{"ASSIGNMENT_EXPRESSION(", doRightIndent()}
 	lines = append(lines, "lvalue=")
 	moreLines := e.lvalue.getPrettyPrintLines()
+	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
 	lines = append(lines, moreLines...)
 	lines = append(lines, "rightExp=")
 	moreLines = e.rightExp.getPrettyPrintLines()
 	lines = append(lines, moreLines...)
+	lines = append(lines, doLeftIndent())
 	lines = append(lines, ")")
 	return lines
 }
