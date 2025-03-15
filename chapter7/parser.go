@@ -20,7 +20,15 @@ type Program struct {
 
 type Function struct {
 	name string
-	body []Block_Item
+	body Block
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+type Block struct {
+	items []Block_Item
 }
 
 //###############################################################################
@@ -28,7 +36,7 @@ type Function struct {
 //###############################################################################
 
 type Block_Item interface {
-	blockToTacky() []Instruction_Tacky
+	blockItemToTacky() []Instruction_Tacky
 	getPrettyPrintLines() []string
 }
 
@@ -70,6 +78,10 @@ type If_Statement struct {
 	condition Expression
 	thenSt    Statement
 	elseSt    Statement
+}
+
+type Compound_Statement struct {
+	block Block
 }
 
 // example: while (true) {;}
@@ -249,18 +261,27 @@ func parseFunction(tokens []Token) (Function, []Token) {
 	_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
 	_, tokens = expect(VOID_KEYWORD_TOKEN, tokens)
 	_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+	block, tokens := parseBlock(tokens)
+
+	fn := Function{name: id, body: block}
+	return fn, tokens
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseBlock(tokens []Token) (Block, []Token) {
 	_, tokens = expect(OPEN_BRACE_TOKEN, tokens)
 
-	body := []Block_Item{}
+	items := []Block_Item{}
 	for peekToken(tokens).tokenType != CLOSE_BRACE_TOKEN {
-		var block Block_Item
-		block, tokens = parseBlockItem(tokens)
-		body = append(body, block)
+		var bItem Block_Item
+		bItem, tokens = parseBlockItem(tokens)
+		items = append(items, bItem)
 	}
 
 	_, tokens = expect(CLOSE_BRACE_TOKEN, tokens)
-	fn := Function{name: id, body: body}
-	return fn, tokens
+	bl := Block{items: items}
+	return bl, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -329,6 +350,9 @@ func parseStatement(tokens []Token) (Statement, []Token) {
 			elseSt, tokens = parseStatement(tokens)
 		}
 		return &If_Statement{condition: cond, thenSt: thenSt, elseSt: elseSt}, tokens
+	} else if nextToken.tokenType == OPEN_BRACE_TOKEN {
+		block, tokens := parseBlock(tokens)
+		return &Compound_Statement{block: block}, tokens
 	} else {
 		var exp Expression
 		exp, tokens = parseExpression(tokens, 0)

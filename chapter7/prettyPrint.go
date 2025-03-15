@@ -101,14 +101,23 @@ func (f *Function) getPrettyPrintLines() []string {
 	lines := []string{"Function(", doRightIndent()}
 	lines = append(lines, "name="+string(f.name)+",")
 	lines = append(lines, "body=")
+	moreLines := f.body.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+	return lines
+}
 
-	for _, block := range f.body {
-		moreLines := block.getPrettyPrintLines()
+/////////////////////////////////////////////////////////////////////////////////
+
+func (bl *Block) getPrettyPrintLines() []string {
+	lines := []string{}
+
+	for _, bItem := range bl.items {
+		moreLines := bItem.getPrettyPrintLines()
 		lines = append(lines, moreLines...)
 	}
 
-	lines = append(lines, doLeftIndent())
-	lines = append(lines, ")")
 	return lines
 }
 
@@ -189,6 +198,12 @@ func (s *If_Statement) getPrettyPrintLines() []string {
 	lines = append(lines, doLeftIndent())
 	lines = append(lines, ")")
 	return lines
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (s *Compound_Statement) getPrettyPrintLines() []string {
+	return s.block.getPrettyPrintLines()
 }
 
 /////////////////////////////////////////////////////////////////////////////////

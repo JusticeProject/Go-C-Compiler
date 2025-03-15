@@ -150,12 +150,7 @@ func (pr *Program) genTacky() Program_Tacky {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (fn *Function) genTacky() Function_Tacky {
-	bodyTac := []Instruction_Tacky{}
-
-	for _, block := range fn.body {
-		instructions := block.blockToTacky()
-		bodyTac = append(bodyTac, instructions...)
-	}
+	bodyTac := fn.body.blockToTacky()
 
 	// Add a return statement to the end of every function just in case the original source didn't have one.
 	// If it already had a return statement then no big deal becuase this new ret instruction will never run.
@@ -165,18 +160,31 @@ func (fn *Function) genTacky() Function_Tacky {
 	return Function_Tacky{name: fn.name, body: bodyTac}
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+
+func (b *Block) blockToTacky() []Instruction_Tacky {
+	instructions := []Instruction_Tacky{}
+
+	for _, bItem := range b.items {
+		moreInstr := bItem.blockItemToTacky()
+		instructions = append(instructions, moreInstr...)
+	}
+
+	return instructions
+}
+
 //###############################################################################
 //###############################################################################
 //###############################################################################
 
-func (b *Block_Statement) blockToTacky() []Instruction_Tacky {
-	return b.st.statementToTacky()
+func (bi *Block_Statement) blockItemToTacky() []Instruction_Tacky {
+	return bi.st.statementToTacky()
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (b *Block_Declaration) blockToTacky() []Instruction_Tacky {
-	return b.decl.declToTacky()
+func (bi *Block_Declaration) blockItemToTacky() []Instruction_Tacky {
+	return bi.decl.declToTacky()
 }
 
 //###############################################################################
@@ -251,6 +259,12 @@ func (st *If_Statement) statementToTacky() []Instruction_Tacky {
 		instructions = append(instructions, &endLabelInstr)
 		return instructions
 	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *Compound_Statement) statementToTacky() []Instruction_Tacky {
+	return st.block.blockToTacky()
 }
 
 /////////////////////////////////////////////////////////////////////////////////
