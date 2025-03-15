@@ -222,6 +222,39 @@ func (st *Expression_Statement) statementToTacky() []Instruction_Tacky {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (st *If_Statement) statementToTacky() []Instruction_Tacky {
+	if st.elseSt == nil {
+		c, instructions := st.condition.expToTacky([]Instruction_Tacky{})
+		endLabel := makeLabelName("end")
+		jmp := Jump_If_Zero_Instruction_Tacky{condition: c, target: endLabel}
+		instructions = append(instructions, &jmp)
+		moreInstr := st.thenSt.statementToTacky()
+		instructions = append(instructions, moreInstr...)
+		lblInstr := Label_Instruction_Tacky{endLabel}
+		instructions = append(instructions, &lblInstr)
+		return instructions
+	} else {
+		c, instructions := st.condition.expToTacky([]Instruction_Tacky{})
+		elseLabel := makeLabelName("else")
+		jmpElse := Jump_If_Zero_Instruction_Tacky{condition: c, target: elseLabel}
+		instructions = append(instructions, &jmpElse)
+		moreInstr := st.thenSt.statementToTacky()
+		instructions = append(instructions, moreInstr...)
+		endLabel := makeLabelName("end")
+		jmpEnd := Jump_Instruction_Tacky{endLabel}
+		instructions = append(instructions, &jmpEnd)
+		elseLabelInstr := Label_Instruction_Tacky{elseLabel}
+		instructions = append(instructions, &elseLabelInstr)
+		moreInstr = st.elseSt.statementToTacky()
+		instructions = append(instructions, moreInstr...)
+		endLabelInstr := Label_Instruction_Tacky{endLabel}
+		instructions = append(instructions, &endLabelInstr)
+		return instructions
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (st *Null_Statement) statementToTacky() []Instruction_Tacky {
 	return []Instruction_Tacky{}
 }
@@ -324,4 +357,28 @@ func (exp *Assignment_Expression) expToTacky(instructions []Instruction_Tacky) (
 	instructions = append(instructions, &cp)
 
 	return &v, instructions
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (exp *Conditional_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+	c, instructions := exp.condition.expToTacky(instructions)
+	rightLabel := makeLabelName("rightExp")
+	jmp := Jump_If_Zero_Instruction_Tacky{c, rightLabel}
+	instructions = append(instructions, &jmp)
+	v1, instructions := exp.middleExp.expToTacky(instructions)
+	result := Variable_Value_Tacky{makeTempVarName("")}
+	cp1 := Copy_Instruction_Tacky{v1, &result}
+	instructions = append(instructions, &cp1)
+	endLabel := makeLabelName("end")
+	jmpEnd := Jump_Instruction_Tacky{endLabel}
+	instructions = append(instructions, &jmpEnd)
+	rightLabelInstr := Label_Instruction_Tacky{rightLabel}
+	instructions = append(instructions, &rightLabelInstr)
+	v2, instructions := exp.rightExp.expToTacky(instructions)
+	cp2 := Copy_Instruction_Tacky{v2, &result}
+	instructions = append(instructions, &cp2)
+	endLabelInstr := Label_Instruction_Tacky{endLabel}
+	instructions = append(instructions, &endLabelInstr)
+	return &result, instructions
 }

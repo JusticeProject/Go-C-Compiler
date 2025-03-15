@@ -38,6 +38,10 @@ var regexp_greater_than *regexp.Regexp = regexp.MustCompile(`>`)
 var regexp_less_or_equal *regexp.Regexp = regexp.MustCompile(`<=`)
 var regexp_greater_or_equal *regexp.Regexp = regexp.MustCompile(`>=`)
 var regexp_equal *regexp.Regexp = regexp.MustCompile(`=`)
+var regexp_if *regexp.Regexp = regexp.MustCompile(`if`)
+var regexp_else *regexp.Regexp = regexp.MustCompile(`else`)
+var regexp_question *regexp.Regexp = regexp.MustCompile(`\?`)
+var regexp_colon *regexp.Regexp = regexp.MustCompile(`:`)
 
 type TokenEnum int
 
@@ -70,6 +74,10 @@ const (
 	LESS_OR_EQUAL_TOKEN
 	GREATER_OR_EQUAL_TOKEN
 	EQUAL_TOKEN
+	IF_KEYWORD_TOKEN
+	ELSE_KEYWORD_TOKEN
+	QUESTION_TOKEN
+	COLON_TOKEN
 )
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -102,12 +110,18 @@ var allRegexp = map[TokenEnum]*regexp.Regexp{
 	LESS_OR_EQUAL_TOKEN:     regexp_less_or_equal,
 	GREATER_OR_EQUAL_TOKEN:  regexp_greater_or_equal,
 	EQUAL_TOKEN:             regexp_equal,
+	IF_KEYWORD_TOKEN:        regexp_if,
+	ELSE_KEYWORD_TOKEN:      regexp_else,
+	QUESTION_TOKEN:          regexp_question,
+	COLON_TOKEN:             regexp_colon,
 }
 
 var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{
 	INT_KEYWORD_TOKEN:    regexp_int_keyword,
 	VOID_KEYWORD_TOKEN:   regexp_void_keyword,
 	RETURN_KEYWORD_TOKEN: regexp_return_keyword,
+	IF_KEYWORD_TOKEN:     regexp_if,
+	ELSE_KEYWORD_TOKEN:   regexp_else,
 }
 
 /////////////////////////////////////////////////////////////////////////////////

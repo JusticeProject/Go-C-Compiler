@@ -78,6 +78,14 @@ func resolveStatement(st Statement, variableMap *map[string]string) Statement {
 	case *Expression_Statement:
 		newExp := resolveExpression(convertedSt.exp, variableMap)
 		return &Expression_Statement{newExp}
+	case *If_Statement:
+		newCond := resolveExpression(convertedSt.condition, variableMap)
+		newThen := resolveStatement(convertedSt.thenSt, variableMap)
+		var newElse Statement
+		if convertedSt.elseSt != nil {
+			newElse = resolveStatement(convertedSt.elseSt, variableMap)
+		}
+		return &If_Statement{condition: newCond, thenSt: newThen, elseSt: newElse}
 	case *Null_Statement:
 		return st
 	default:
@@ -118,6 +126,11 @@ func resolveExpression(exp Expression, variableMap *map[string]string) Expressio
 		newLvalue := resolveExpression(convertedExp.lvalue, variableMap)
 		newRightExp := resolveExpression(convertedExp.rightExp, variableMap)
 		return &Assignment_Expression{lvalue: newLvalue, rightExp: newRightExp}
+	case *Conditional_Expression:
+		newCond := resolveExpression(convertedExp.condition, variableMap)
+		newMiddle := resolveExpression(convertedExp.middleExp, variableMap)
+		newRight := resolveExpression(convertedExp.rightExp, variableMap)
+		return &Conditional_Expression{condition: newCond, middleExp: newMiddle, rightExp: newRight}
 	default:
 		fmt.Println("unknown Expression type when resolving variables")
 		os.Exit(1)

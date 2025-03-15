@@ -66,6 +66,12 @@ type Expression_Statement struct {
 	exp Expression
 }
 
+type If_Statement struct {
+	condition Expression
+	thenSt    Statement
+	elseSt    Statement
+}
+
 // example: while (true) {;}
 // the ; is a null statement
 type Null_Statement struct {
@@ -102,6 +108,13 @@ type Binary_Expression struct {
 type Assignment_Expression struct {
 	lvalue   Expression
 	rightExp Expression
+}
+
+// example: a == 3 ? 1 : 2
+type Conditional_Expression struct {
+	condition Expression
+	middleExp Expression
+	rightExp  Expression
 }
 
 //###############################################################################
@@ -150,6 +163,7 @@ const (
 	GREATER_THAN_OPERATOR
 	GREATER_OR_EQUAL_OPERATOR
 	ASSIGNMENT_OPERATOR
+	CONDITIONAL_OPERATOR
 )
 
 func getBinaryOperator(token Token) BinaryOperatorType {
@@ -182,6 +196,8 @@ func getBinaryOperator(token Token) BinaryOperatorType {
 		return GREATER_OR_EQUAL_OPERATOR
 	case EQUAL_TOKEN:
 		return ASSIGNMENT_OPERATOR
+	case QUESTION_TOKEN:
+		return CONDITIONAL_OPERATOR
 	}
 
 	return NONE_BINARY_OPERATOR
@@ -301,6 +317,18 @@ func parseStatement(tokens []Token) (Statement, []Token) {
 	} else if nextToken.tokenType == SEMICOLON_TOKEN {
 		_, tokens = expect(SEMICOLON_TOKEN, tokens)
 		return &Null_Statement{}, tokens
+	} else if nextToken.tokenType == IF_KEYWORD_TOKEN {
+		_, tokens = expect(IF_KEYWORD_TOKEN, tokens)
+		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
+		cond, tokens := parseExpression(tokens, 0)
+		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+		thenSt, tokens := parseStatement(tokens)
+		var elseSt Statement = nil
+		if peekToken(tokens).tokenType == ELSE_KEYWORD_TOKEN {
+			_, tokens = expect(ELSE_KEYWORD_TOKEN, tokens)
+			elseSt, tokens = parseStatement(tokens)
+		}
+		return &If_Statement{condition: cond, thenSt: thenSt, elseSt: elseSt}, tokens
 	} else {
 		var exp Expression
 		exp, tokens = parseExpression(tokens, 0)
@@ -321,6 +349,14 @@ func parseExpression(tokens []Token, minPrecedence int) (Expression, []Token) {
 			var right Expression
 			right, tokens = parseExpression(tokens, getPrecedence(nextToken))
 			left = &Assignment_Expression{lvalue: left, rightExp: right}
+		} else if nextToken.tokenType == QUESTION_TOKEN {
+			_, tokens = expect(QUESTION_TOKEN, tokens)
+			var middleExp Expression
+			middleExp, tokens = parseExpression(tokens, 0)
+			_, tokens = expect(COLON_TOKEN, tokens)
+			var rightExp Expression
+			rightExp, tokens = parseExpression(tokens, getPrecedence(nextToken))
+			left = &Conditional_Expression{condition: left, middleExp: middleExp, rightExp: rightExp}
 		} else {
 			var binOpType BinaryOperatorType
 			binOpType, tokens = parseBinaryOperator(tokens)
@@ -337,7 +373,6 @@ func parseExpression(tokens []Token, minPrecedence int) (Expression, []Token) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func getPrecedence(token Token) int {
-	// TODO: should this switch on BinaryOperatorType or TokenEnum?
 	switch token.tokenType {
 	case ASTERISK_TOKEN:
 		return 50
@@ -365,6 +400,8 @@ func getPrecedence(token Token) int {
 		return 10
 	case TWO_VERTICAL_BARS_TOKEN:
 		return 5
+	case QUESTION_TOKEN:
+		return 3
 	case EQUAL_TOKEN:
 		return 1
 	default:

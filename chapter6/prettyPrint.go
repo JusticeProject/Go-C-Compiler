@@ -172,6 +172,27 @@ func (s *Expression_Statement) getPrettyPrintLines() []string {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (s *If_Statement) getPrettyPrintLines() []string {
+	lines := []string{"IF_STATEMENT(", doRightIndent(), "condition="}
+	moreLines := s.condition.getPrettyPrintLines()
+	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+	lines = append(lines, moreLines...)
+	lines = append(lines, "then=")
+	moreLines = s.thenSt.getPrettyPrintLines()
+	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+	lines = append(lines, moreLines...)
+	lines = append(lines, "else=")
+	if s.elseSt != nil {
+		moreLines = s.elseSt.getPrettyPrintLines()
+		lines = append(lines, moreLines...)
+	}
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+	return lines
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (s *Null_Statement) getPrettyPrintLines() []string {
 	return []string{"NULL_STATEMENT()"}
 }
@@ -222,6 +243,25 @@ func (e *Assignment_Expression) getPrettyPrintLines() []string {
 	lines := []string{"ASSIGNMENT_EXPRESSION(", doRightIndent()}
 	lines = append(lines, "lvalue=")
 	moreLines := e.lvalue.getPrettyPrintLines()
+	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+	lines = append(lines, moreLines...)
+	lines = append(lines, "rightExp=")
+	moreLines = e.rightExp.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+	return lines
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (e *Conditional_Expression) getPrettyPrintLines() []string {
+	lines := []string{"CONDITIONAL_EXPRESSION(", doRightIndent(), "condition="}
+	moreLines := e.condition.getPrettyPrintLines()
+	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+	lines = append(lines, moreLines...)
+	lines = append(lines, "middleExp=")
+	moreLines = e.middleExp.getPrettyPrintLines()
 	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
 	lines = append(lines, moreLines...)
 	lines = append(lines, "rightExp=")

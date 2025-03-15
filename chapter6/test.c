@@ -1,7 +1,16 @@
 int main(void) {
-    int a;
-    a = 2;
-    a = a + 1;
-    int b = 3;
-    return a * b;
+    int a = 0;
+
+    if (a < 1)
+        a = a + 1;
+
+    if (a < 1)
+        a = 1;
+    else
+        a = 10;
+
+    a = (a == 10) ? 20 : 30;
+    a = (a == 19) ? 40 : 60;
+
+    return a;
 }
