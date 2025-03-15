@@ -419,25 +419,25 @@ func (pr *Program_Asm) replacePseudoregisters() int32 {
 	for index, _ := range pr.fn.instructions {
 		switch convertedInstr := pr.fn.instructions[index].(type) {
 		case *Mov_Instruction_Asm:
-			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &stackOffset, &nameToOffset)
-			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &stackOffset, &nameToOffset)
+			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &stackOffset, nameToOffset)
+			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &stackOffset, nameToOffset)
 			pr.fn.instructions[index] = convertedInstr
 		case *Unary_Instruction_Asm:
-			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &stackOffset, &nameToOffset)
+			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &stackOffset, nameToOffset)
 			pr.fn.instructions[index] = convertedInstr
 		case *Binary_Instruction_Asm:
-			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &stackOffset, &nameToOffset)
-			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &stackOffset, &nameToOffset)
+			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &stackOffset, nameToOffset)
+			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &stackOffset, nameToOffset)
 			pr.fn.instructions[index] = convertedInstr
 		case *IDivide_Instruction_Asm:
-			convertedInstr.divisor = replaceIfPseudoregister(convertedInstr.divisor, &stackOffset, &nameToOffset)
+			convertedInstr.divisor = replaceIfPseudoregister(convertedInstr.divisor, &stackOffset, nameToOffset)
 			pr.fn.instructions[index] = convertedInstr
 		case *Compare_Instruction_Asm:
-			convertedInstr.op1 = replaceIfPseudoregister(convertedInstr.op1, &stackOffset, &nameToOffset)
-			convertedInstr.op2 = replaceIfPseudoregister(convertedInstr.op2, &stackOffset, &nameToOffset)
+			convertedInstr.op1 = replaceIfPseudoregister(convertedInstr.op1, &stackOffset, nameToOffset)
+			convertedInstr.op2 = replaceIfPseudoregister(convertedInstr.op2, &stackOffset, nameToOffset)
 			pr.fn.instructions[index] = convertedInstr
 		case *Set_Conditional_Instruction_Asm:
-			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &stackOffset, &nameToOffset)
+			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &stackOffset, nameToOffset)
 			pr.fn.instructions[index] = convertedInstr
 		}
 
@@ -448,7 +448,7 @@ func (pr *Program_Asm) replacePseudoregisters() int32 {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func replaceIfPseudoregister(op Operand_Asm, stackOffset *int32, nameToOffset *map[string]int32) Operand_Asm {
+func replaceIfPseudoregister(op Operand_Asm, stackOffset *int32, nameToOffset map[string]int32) Operand_Asm {
 	if op == nil {
 		return nil
 	}
@@ -459,12 +459,12 @@ func replaceIfPseudoregister(op Operand_Asm, stackOffset *int32, nameToOffset *m
 		return op
 	}
 
-	existingOffset, alreadyExists := (*nameToOffset)[convertedOp.name]
+	existingOffset, alreadyExists := nameToOffset[convertedOp.name]
 	if alreadyExists {
 		return &Stack_Operand_Asm{value: existingOffset}
 	} else {
 		*stackOffset = *stackOffset - 4
-		(*nameToOffset)[convertedOp.name] = *stackOffset
+		nameToOffset[convertedOp.name] = *stackOffset
 		return &Stack_Operand_Asm{value: *stackOffset}
 	}
 }
