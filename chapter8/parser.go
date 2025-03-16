@@ -61,6 +61,23 @@ type Declaration struct {
 //###############################################################################
 //###############################################################################
 
+type For_Initial_Clause interface {
+	forInitialToTacky() []Instruction_Tacky
+	getPrettyPrintLines() []string
+}
+
+type For_Initial_Declaration struct {
+	decl Declaration
+}
+
+type For_Initial_Expression struct {
+	exp Expression
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
 type Statement interface {
 	statementToTacky() []Instruction_Tacky
 	getPrettyPrintLines() []string
@@ -82,6 +99,34 @@ type If_Statement struct {
 
 type Compound_Statement struct {
 	block Block
+}
+
+type Break_Statement struct {
+	label string
+}
+
+type Continue_Statement struct {
+	label string
+}
+
+type While_Statement struct {
+	condition Expression
+	body      Statement
+	label     string
+}
+
+type Do_While_Statement struct {
+	body      Statement
+	condition Expression
+	label     string
+}
+
+type For_Statement struct {
+	initial   For_Initial_Clause
+	condition Expression
+	post      Expression
+	body      Statement
+	label     string
 }
 
 // example: while (true) {;}
@@ -305,7 +350,7 @@ func parseBlockItem(tokens []Token) (Block_Item, []Token) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseDeclaration(tokens []Token) (Declaration, []Token) {
-	// TODO: need to handle other data types
+	// TODO: need to handle other data types, expectDataType() helper function?
 	_, tokens = expect(INT_KEYWORD_TOKEN, tokens)
 	var name string
 	name, tokens = parseIdentifier(tokens)
@@ -322,6 +367,22 @@ func parseDeclaration(tokens []Token) (Declaration, []Token) {
 	_, tokens = expect(SEMICOLON_TOKEN, tokens)
 
 	return decl, tokens
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseForInitial(tokens []Token) (For_Initial_Clause, []Token) {
+	// TODO: use helper function isDataType(nextToken) to check if next token is one of the keywords int, bool, float, etc.
+	nextToken := peekToken(tokens)
+
+	if nextToken.tokenType == INT_KEYWORD_TOKEN {
+		decl, tokens := parseDeclaration(tokens)
+		return &For_Initial_Declaration{decl: decl}, tokens
+	} else {
+		// must be an (optional) expression
+		exp, tokens := parseOptionalExpression(tokens, SEMICOLON_TOKEN)
+		return &For_Initial_Expression{exp: exp}, tokens
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -353,11 +414,58 @@ func parseStatement(tokens []Token) (Statement, []Token) {
 	} else if nextToken.tokenType == OPEN_BRACE_TOKEN {
 		block, tokens := parseBlock(tokens)
 		return &Compound_Statement{block: block}, tokens
+	} else if nextToken.tokenType == BREAK_KEYWORD_TOKEN {
+		_, tokens = expect(BREAK_KEYWORD_TOKEN, tokens)
+		_, tokens = expect(SEMICOLON_TOKEN, tokens)
+		return &Break_Statement{}, tokens
+	} else if nextToken.tokenType == CONTINUE_KEYWORD_TOKEN {
+		_, tokens = expect(CONTINUE_KEYWORD_TOKEN, tokens)
+		_, tokens = expect(SEMICOLON_TOKEN, tokens)
+		return &Continue_Statement{}, tokens
+	} else if nextToken.tokenType == WHILE_KEYWORD_TOKEN {
+		_, tokens = expect(WHILE_KEYWORD_TOKEN, tokens)
+		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
+		condition, tokens := parseExpression(tokens, 0)
+		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+		body, tokens := parseStatement(tokens)
+		return &While_Statement{condition: condition, body: body}, tokens
+	} else if nextToken.tokenType == DO_KEYWORD_TOKEN {
+		_, tokens = expect(DO_KEYWORD_TOKEN, tokens)
+		body, tokens := parseStatement(tokens)
+		_, tokens = expect(WHILE_KEYWORD_TOKEN, tokens)
+		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
+		condition, tokens := parseExpression(tokens, 0)
+		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+		_, tokens = expect(SEMICOLON_TOKEN, tokens)
+		return &Do_While_Statement{body: body, condition: condition}, tokens
+	} else if nextToken.tokenType == FOR_KEYWORD_TOKEN {
+		_, tokens = expect(FOR_KEYWORD_TOKEN, tokens)
+		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
+		forInit, tokens := parseForInitial(tokens)
+		condition, tokens := parseOptionalExpression(tokens, SEMICOLON_TOKEN)
+		post, tokens := parseOptionalExpression(tokens, CLOSE_PARENTHESIS_TOKEN)
+		body, tokens := parseStatement(tokens)
+		return &For_Statement{initial: forInit, condition: condition, post: post, body: body}, tokens
 	} else {
 		var exp Expression
 		exp, tokens = parseExpression(tokens, 0)
 		_, tokens = expect(SEMICOLON_TOKEN, tokens)
 		return &Expression_Statement{exp: exp}, tokens
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseOptionalExpression(tokens []Token, expectedEndToken TokenEnum) (Expression, []Token) {
+	nextToken := peekToken(tokens)
+
+	if nextToken.tokenType == expectedEndToken {
+		_, tokens = expect(expectedEndToken, tokens)
+		return nil, tokens
+	} else {
+		exp, tokens := parseExpression(tokens, 0)
+		_, tokens = expect(expectedEndToken, tokens)
+		return exp, tokens
 	}
 }
 

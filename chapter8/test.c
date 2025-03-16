@@ -1,16 +1,29 @@
 int main(void) {
-    int a = 0;
-    int b = 0;
+    int sum = 0;
 
-    if (a < 1)
+    for (int i = 1; i <=4; i = i + 1)
     {
-        int a = 2;
-        b = a + 1;
-    }
-    else
-    {
-        a = 5;
+        sum = sum + i;
     }
 
-    return b;
+    int a = 1;
+    while (1) {
+        sum = sum + a;
+        a = a + 1;
+
+        if (a > 4) {
+            break;
+        }
+    }
+
+    a = 0;
+    do {
+        a = a + 1;
+        if (a > 4) {
+            continue;
+        }
+        sum = sum + a;
+    } while (a <= 4);
+
+    return sum;
 }

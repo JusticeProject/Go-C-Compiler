@@ -159,6 +159,24 @@ func (d *Declaration) getPrettyPrintLines() []string {
 //###############################################################################
 //###############################################################################
 
+func (fid *For_Initial_Declaration) getPrettyPrintLines() []string {
+	return fid.decl.getPrettyPrintLines()
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (fie *For_Initial_Expression) getPrettyPrintLines() []string {
+	if fie.exp == nil {
+		return []string{}
+	} else {
+		return fie.exp.getPrettyPrintLines()
+	}
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
 func (s *Return_Statement) getPrettyPrintLines() []string {
 	lines := []string{"RETURN_STATEMENT(", doRightIndent()}
 	moreLines := s.exp.getPrettyPrintLines()
@@ -204,6 +222,84 @@ func (s *If_Statement) getPrettyPrintLines() []string {
 
 func (s *Compound_Statement) getPrettyPrintLines() []string {
 	return s.block.getPrettyPrintLines()
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (s *Break_Statement) getPrettyPrintLines() []string {
+	return []string{"BREAK_STATEMENT()"}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (s *Continue_Statement) getPrettyPrintLines() []string {
+	return []string{"CONTINUE_STATEMENT()"}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (s *While_Statement) getPrettyPrintLines() []string {
+	lines := []string{"WHILE(", doRightIndent(), "condition="}
+	moreLines := s.condition.getPrettyPrintLines()
+	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+	lines = append(lines, moreLines...)
+	lines = append(lines, "body=")
+	moreLines = s.body.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+	return lines
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (s *Do_While_Statement) getPrettyPrintLines() []string {
+	lines := []string{"DO_WHILE(", doRightIndent(), "body="}
+	moreLines := s.body.getPrettyPrintLines()
+	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+	lines = append(lines, moreLines...)
+	lines = append(lines, "condition=")
+	moreLines = s.condition.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+	return lines
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (s *For_Statement) getPrettyPrintLines() []string {
+	lines := []string{"FOR(", doRightIndent(), "initial="}
+
+	moreLines := s.initial.getPrettyPrintLines()
+	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+	lines = append(lines, moreLines...)
+
+	lines = append(lines, "condition=")
+	if s.condition != nil {
+		moreLines = s.condition.getPrettyPrintLines()
+		moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+		lines = append(lines, moreLines...)
+	} else {
+		lines = append(lines, ",")
+	}
+
+	lines = append(lines, "post=")
+	if s.post != nil {
+		moreLines = s.post.getPrettyPrintLines()
+		moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+		lines = append(lines, moreLines...)
+	} else {
+		lines = append(lines, ",")
+	}
+
+	lines = append(lines, "body=")
+	moreLines = s.body.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+	return lines
 }
 
 /////////////////////////////////////////////////////////////////////////////////
