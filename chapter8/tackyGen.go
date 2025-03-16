@@ -212,6 +212,25 @@ func (d *Declaration) declToTacky() []Instruction_Tacky {
 //###############################################################################
 //###############################################################################
 
+func (fid *For_Initial_Declaration) forInitialToTacky() []Instruction_Tacky {
+	return fid.decl.declToTacky()
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (fie *For_Initial_Expression) forInitialToTacky() []Instruction_Tacky {
+	if fie.exp == nil {
+		return []Instruction_Tacky{}
+	} else {
+		_, instructions := fie.exp.expToTacky([]Instruction_Tacky{})
+		return instructions
+	}
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
 func (st *Return_Statement) statementToTacky() []Instruction_Tacky {
 	instructions := []Instruction_Tacky{}
 	val, instructions := st.exp.expToTacky(instructions)
@@ -265,6 +284,107 @@ func (st *If_Statement) statementToTacky() []Instruction_Tacky {
 
 func (st *Compound_Statement) statementToTacky() []Instruction_Tacky {
 	return st.block.blockToTacky()
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *Break_Statement) statementToTacky() []Instruction_Tacky {
+	jmp := Jump_Instruction_Tacky{"break_" + st.label}
+	return []Instruction_Tacky{&jmp}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *Continue_Statement) statementToTacky() []Instruction_Tacky {
+	jmp := Jump_Instruction_Tacky{"continue_" + st.label}
+	return []Instruction_Tacky{&jmp}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *While_Statement) statementToTacky() []Instruction_Tacky {
+	instructions := []Instruction_Tacky{}
+
+	continueLabel := Label_Instruction_Tacky{"continue_" + st.label}
+	instructions = append(instructions, &continueLabel)
+
+	v, instructions := st.condition.expToTacky(instructions)
+
+	jmpBreak := Jump_If_Zero_Instruction_Tacky{condition: v, target: "break_" + st.label}
+	instructions = append(instructions, &jmpBreak)
+
+	moreInstr := st.body.statementToTacky()
+	instructions = append(instructions, moreInstr...)
+
+	jmpContinue := Jump_Instruction_Tacky{"continue_" + st.label}
+	instructions = append(instructions, &jmpContinue)
+
+	breakLabel := Label_Instruction_Tacky{"break_" + st.label}
+	instructions = append(instructions, &breakLabel)
+
+	return instructions
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *Do_While_Statement) statementToTacky() []Instruction_Tacky {
+	instructions := []Instruction_Tacky{}
+
+	startLabel := Label_Instruction_Tacky{"start_" + st.label}
+	instructions = append(instructions, &startLabel)
+
+	moreInstr := st.body.statementToTacky()
+	instructions = append(instructions, moreInstr...)
+
+	continueLabel := Label_Instruction_Tacky{"continue_" + st.label}
+	instructions = append(instructions, &continueLabel)
+
+	v, instructions := st.condition.expToTacky(instructions)
+
+	jmp := Jump_If_Not_Zero_Instruction_Tacky{condition: v, target: "start_" + st.label}
+	instructions = append(instructions, &jmp)
+
+	breakLabel := Label_Instruction_Tacky{"break_" + st.label}
+	instructions = append(instructions, &breakLabel)
+
+	return instructions
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *For_Statement) statementToTacky() []Instruction_Tacky {
+	instructions := []Instruction_Tacky{}
+
+	moreInstr := st.initial.forInitialToTacky()
+	instructions = append(instructions, moreInstr...)
+
+	startLabel := Label_Instruction_Tacky{"start_" + st.label}
+	instructions = append(instructions, &startLabel)
+
+	if st.condition != nil {
+		var v Value_Tacky
+		v, instructions = st.condition.expToTacky(instructions)
+		jmpBreak := Jump_If_Zero_Instruction_Tacky{condition: v, target: "break_" + st.label}
+		instructions = append(instructions, &jmpBreak)
+	}
+
+	moreInstr = st.body.statementToTacky()
+	instructions = append(instructions, moreInstr...)
+
+	continueLabel := Label_Instruction_Tacky{"continue_" + st.label}
+	instructions = append(instructions, &continueLabel)
+
+	if st.post != nil {
+		_, instructions = st.post.expToTacky(instructions)
+	}
+
+	jmp := Jump_Instruction_Tacky{target: "start_" + st.label}
+	instructions = append(instructions, &jmp)
+
+	breakLabel := Label_Instruction_Tacky{"break_" + st.label}
+	instructions = append(instructions, &breakLabel)
+
+	return instructions
 }
 
 /////////////////////////////////////////////////////////////////////////////////
