@@ -33,6 +33,7 @@ func doLinux() {
 		fmt.Println("--codegen will stop after assembly generation and before code emission, no output files are produced")
 		fmt.Println("-S will emit an assembly file but will not assemble or link it")
 		fmt.Println("-c will emit an object file but will not link it")
+		fmt.Println("-o is used to specify the executable name. The default is to use the first .c file and remove the .c from the name.")
 		os.Exit(1)
 	}
 
