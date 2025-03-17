@@ -272,7 +272,11 @@ func (s *For_Statement) getPrettyPrintLines() []string {
 	lines := []string{"FOR(", doRightIndent(), "initial="}
 
 	moreLines := s.initial.getPrettyPrintLines()
-	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+	if len(moreLines) > 0 {
+		moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+	} else {
+		moreLines = []string{","}
+	}
 	lines = append(lines, moreLines...)
 
 	lines = append(lines, "condition=")

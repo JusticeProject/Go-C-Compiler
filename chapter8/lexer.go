@@ -204,7 +204,7 @@ func longestMatchAtStart(contents string) (TokenEnum, int, int) {
 	for enum, re := range allRegexp {
 		result := re.FindStringIndex(contents)
 
-		// if it found something and if it's at the beginning of the string
+		// if it found something and if the first index is at the beginning of the string
 		if result != nil && result[0] == 0 {
 			// save it if the word is longer than what we've found before
 			if (result[1] - result[0]) > (end - start) {
@@ -223,9 +223,11 @@ func longestMatchAtStart(contents string) (TokenEnum, int, int) {
 func keywordOrIdentifier(word string) TokenEnum {
 	// This function assumes the word has already been labeled an IDENTIFIER.
 	// Loop through all keyword regexp's to see if it matches a keyword.
+	// But the regex must match at the beginning.
 	for enum, re := range allKeywordRegexp {
 		result := re.FindStringIndex(word)
-		if result != nil {
+		// if it found a match and if the first index is at the beginning of the string
+		if result != nil && result[0] == 0 {
 			return enum
 		}
 	}
