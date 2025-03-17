@@ -23,131 +23,146 @@ func main() {
 
 func doLinux() {
 	fmt.Println("running Linux version")
-	if len(os.Args) < 2 || len(os.Args) > 3 {
+	if len(os.Args) < 2 {
 		fmt.Println("Usage: goc /path/to/source.c")
 		fmt.Println("Options:")
-		fmt.Println("--lex will run lexer but stop before parsing, no output files are produced")
-		fmt.Println("--parse will run lexer and parser but stop before semantic analysis, no output files are produced")
-		fmt.Println("--validate will run lexer, parser, semantic analysis but stop before tacky generation, no output files are produced")
-		fmt.Println("--tacky will run lexer, parser, semantic analysis, tacky generation but stop before assembly generation, no output files are produced")
-		fmt.Println("--codegen will run up to assembly generation but stop before code emission, no output files are produced")
+		fmt.Println("--lex will stop after the lexer and before the parser, no output files are produced")
+		fmt.Println("--parse will stop after the parser and before semantic analysis, no output files are produced")
+		fmt.Println("--validate will stop after semantic analysis and before tacky generation, no output files are produced")
+		fmt.Println("--tacky will stop after tacky generation and before assembly generation, no output files are produced")
+		fmt.Println("--codegen will stop after assembly generation and before code emission, no output files are produced")
 		fmt.Println("-S will emit an assembly file but will not assemble or link it")
+		fmt.Println("-c will emit an object file but will not link it")
 		os.Exit(1)
 	}
 
-	inputFilename := os.Args[1]
-	if filepath.Ext(inputFilename) != ".c" {
-		fmt.Println("Please use a file with .c extension")
-		os.Exit(1)
-	}
-	fmt.Println("found inputFilename", inputFilename)
+	fmt.Println("found", len(os.Args), "args")
+
+	allInputFileNames := []string{}
 
 	runParser := true
 	runSemanticAnalysis := true
 	runTackyGeneration := true
 	runAssemblyGeneration := true
 	runCodeEmission := true
+
+	produceObjectFile := false
 	produceExecutable := true
+	outputFilename := ""
 
-	fmt.Println("found", len(os.Args), "args")
+	// index 0 is the program currently running (./goc)
+	for index := 1; index < len(os.Args); index++ {
+		currentArg := os.Args[index]
 
-	if len(os.Args) == 3 {
-		switch os.Args[2] {
-		case "--lex":
-			fmt.Println("stopping after lexer")
-			runParser = false
-			runSemanticAnalysis = false
-			runTackyGeneration = false
-			runAssemblyGeneration = false
-			runCodeEmission = false
-			produceExecutable = false
-		case "--parse":
-			fmt.Println("stopping after parser")
-			runParser = true
-			runSemanticAnalysis = false
-			runTackyGeneration = false
-			runAssemblyGeneration = false
-			runCodeEmission = false
-			produceExecutable = false
-		case "--validate":
-			fmt.Println("stopping after semantic analysis")
-			runParser = true
-			runSemanticAnalysis = true
-			runTackyGeneration = false
-			runAssemblyGeneration = false
-			runCodeEmission = false
-			produceExecutable = false
-		case "--tacky":
-			fmt.Println("stopping after tacky genration")
-			runParser = true
-			runSemanticAnalysis = true
-			runTackyGeneration = true
-			runAssemblyGeneration = false
-			runCodeEmission = false
-			produceExecutable = false
-		case "--codegen":
-			fmt.Println("stopping after assembly generation")
-			runParser = true
-			runSemanticAnalysis = true
-			runTackyGeneration = true
-			runAssemblyGeneration = true
-			runCodeEmission = false
-			produceExecutable = false
-		case "-S":
-			fmt.Println("stopping after code emission")
-			runParser = true
-			runSemanticAnalysis = true
-			runTackyGeneration = true
-			runAssemblyGeneration = true
-			runCodeEmission = true
-			produceExecutable = false
-		default:
-			fmt.Println("unknown option, exiting")
-			os.Exit(1)
+		if filepath.Ext(currentArg) == ".c" {
+			allInputFileNames = append(allInputFileNames, currentArg)
+			fmt.Println("found source file", currentArg)
+		}
+
+		if currentArg[0:1] == "-" {
+			switch currentArg {
+			case "--lex":
+				fmt.Println("stopping after lexer")
+				runParser = false
+			case "--parse":
+				fmt.Println("stopping after parser")
+				runSemanticAnalysis = false
+			case "--validate":
+				fmt.Println("stopping after semantic analysis")
+				runTackyGeneration = false
+			case "--tacky":
+				fmt.Println("stopping after tacky generation")
+				runAssemblyGeneration = false
+			case "--codegen":
+				fmt.Println("stopping after assembly generation")
+				runCodeEmission = false
+			case "-S":
+				fmt.Println("stopping after code emission")
+				produceExecutable = false
+			case "-c":
+				fmt.Println("creating object file instead of executable")
+				produceObjectFile = true
+				produceExecutable = false
+			case "-o":
+				// check that index + 1 is valid before using it
+				if (index + 1) < len(os.Args) {
+					outputFilename = os.Args[index+1]
+					index++
+				}
+			default:
+				fmt.Println("unknown option, exiting")
+				os.Exit(1)
+			}
 		}
 	}
 
-	// produce preprocessed file
-	preprocessedFilename := strings.TrimSuffix(inputFilename, ".c") + ".i"
-	outBytes, err := exec.Command("gcc", "-E", "-P", inputFilename, "-o", preprocessedFilename).CombinedOutput()
-	if err != nil {
-		fmt.Println("gcc returned error:", err)
-		fmt.Printf("additional info: %s\n", outBytes)
-		os.Exit(1)
+	allAssemblyFilenames := []string{}
+	for _, filename := range allInputFileNames {
+		// produce preprocessed file
+		preprocessedFilename := strings.TrimSuffix(filename, ".c") + ".i"
+		outBytes, err := exec.Command("gcc", "-E", "-P", filename, "-o", preprocessedFilename).CombinedOutput()
+		if err != nil {
+			fmt.Println("gcc returned error:", err)
+			fmt.Printf("additional info: %s\n", outBytes)
+			os.Exit(1)
+		}
+
+		fileContents := loadFile(preprocessedFilename)
+
+		// delete preprocessed file
+		err = os.Remove(preprocessedFilename)
+		if err != nil {
+			fmt.Println("Could not remove preprocessedFile")
+		}
+
+		// do the compilation and produce an assembly file
+		assemblyFilename := strings.TrimSuffix(filename, ".c") + ".s"
+		allAssemblyFilenames = append(allAssemblyFilenames, assemblyFilename)
+		doCompilerSteps(fileContents, runParser, runSemanticAnalysis, runTackyGeneration, runAssemblyGeneration, runCodeEmission, assemblyFilename)
 	}
 
-	fileContents := loadFile(preprocessedFilename)
+	if produceObjectFile {
+		// assemble but don't link for each assembly file
+		for _, assemblyFile := range allAssemblyFilenames {
+			objectFilename := strings.TrimSuffix(assemblyFile, ".s") + ".o"
+			outBytes, err := exec.Command("gcc", "-c", assemblyFile, "-o", objectFilename).CombinedOutput()
+			if err != nil {
+				fmt.Println("gcc returned error:", err)
+				fmt.Printf("additional info: %s\n", outBytes)
+				os.Exit(1)
+			}
 
-	// delete preprocessed file
-	err = os.Remove(preprocessedFilename)
-	if err != nil {
-		fmt.Println("Could not remove preprocessedFile")
+			fmt.Println("object file created:", objectFilename)
+		}
+	} else if produceExecutable {
+		// assembly and link using gcc
+		gccArgs := make([]string, len(allAssemblyFilenames))
+		copy(gccArgs, allAssemblyFilenames)
+		gccArgs = append(gccArgs, "-o")
+		if outputFilename == "" {
+			// no output filename was given, so use the first .c file
+			outputFilename = strings.TrimSuffix(allInputFileNames[0], ".c")
+		}
+		gccArgs = append(gccArgs, outputFilename)
+
+		outBytes, err := exec.Command("gcc", gccArgs...).CombinedOutput()
+		if err != nil {
+			fmt.Println("gcc returned error:", err)
+			fmt.Printf("additional info: %s\n", outBytes)
+			os.Exit(1)
+		}
+
+		fmt.Println("executable created:", outputFilename)
 	}
 
-	// do the compilation
-	assemblyFilename := strings.TrimSuffix(inputFilename, ".c") + ".s"
-	doCompilerSteps(fileContents, runParser, runSemanticAnalysis, runTackyGeneration, runAssemblyGeneration, runCodeEmission, assemblyFilename)
-
-	if !produceExecutable {
-		os.Exit(0)
+	// remove the assembly file(s)
+	for _, filename := range allAssemblyFilenames {
+		err := os.Remove(filename)
+		if err != nil {
+			fmt.Println("Could not remove assembly file", filename)
+		}
 	}
 
-	// assembly and link using gcc (produce executable)
-	binaryFilename := strings.TrimSuffix(inputFilename, ".c")
-	outBytes, err = exec.Command("gcc", assemblyFilename, "-o", binaryFilename).CombinedOutput()
-	if err != nil {
-		fmt.Println("gcc returned error:", err)
-		fmt.Printf("additional info: %s\n", outBytes)
-		os.Exit(1)
-	}
-
-	fmt.Println("binary file created:", binaryFilename)
-
-	// remove the assembly file
-	err = os.Remove(assemblyFilename)
-	if err != nil {
-		fmt.Println("Could not remove assemblyFilename")
-	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
