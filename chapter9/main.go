@@ -207,7 +207,9 @@ func doCompilerSteps(fileContents string, runParser bool, runSemanticAnalysis bo
 
 	// run semantic analysis and update the Abstract Syntax Tree
 	fmt.Println("running semantic analysis")
-	ast = doSemanticAnalysis(ast)
+	ast = doIdentifierResolution(ast)
+	ast = doTypeChecking(ast)
+	ast = doLoopLabeling(ast)
 
 	if !runTackyGeneration {
 		fmt.Println("not running tacky generation, done")
