@@ -11,16 +11,28 @@ import (
 //###############################################################################
 
 type Program struct {
-	fn Function
+	functions []Function_Declaration
 }
 
 //###############################################################################
 //###############################################################################
 //###############################################################################
 
-type Function struct {
+type Declaration interface {
+	declToTacky() []Instruction_Tacky
+	getPrettyPrintLines() []string
+}
+
+type Variable_Declaration struct {
+	name        string
+	initializer Expression
+}
+
+type Function_Declaration struct {
 	name string
-	body Block
+	// TODO: will need to change string to Identifier which will hold a string and a type?
+	params []string
+	body   *Block
 }
 
 //###############################################################################
@@ -52,22 +64,14 @@ type Block_Declaration struct {
 //###############################################################################
 //###############################################################################
 
-type Declaration struct {
-	name        string
-	initializer Expression
-}
-
-//###############################################################################
-//###############################################################################
-//###############################################################################
-
 type For_Initial_Clause interface {
 	forInitialToTacky() []Instruction_Tacky
 	getPrettyPrintLines() []string
 }
 
 type For_Initial_Declaration struct {
-	decl Declaration
+	// this should always be a Variable_Declaration, so don't use the Declaration interface
+	decl Variable_Declaration
 }
 
 type For_Initial_Expression struct {
@@ -172,6 +176,11 @@ type Conditional_Expression struct {
 	condition Expression
 	middleExp Expression
 	rightExp  Expression
+}
+
+type Function_Call_Expression struct {
+	functionName string
+	args         []Expression
 }
 
 //###############################################################################
@@ -293,23 +302,106 @@ func doParser(tokens []Token) Program {
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseProgram(tokens []Token) (Program, []Token) {
-	fn, tokens := parseFunction(tokens)
-	pr := Program{fn: fn}
+	functions := []Function_Declaration{}
+
+	// TODO: change to nextToken isDataType()
+	for peekToken(tokens).tokenType == INT_KEYWORD_TOKEN {
+		var decl Declaration
+		decl, tokens = parseDeclaration(tokens)
+		fnDecl, ok := decl.(*Function_Declaration)
+		if ok {
+			functions = append(functions, *fnDecl)
+		}
+
+	}
+
+	pr := Program{functions: functions}
 	return pr, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseFunction(tokens []Token) (Function, []Token) {
+func parseDeclaration(tokens []Token) (Declaration, []Token) {
+	// TODO: need to handle other data types, expectDataType() helper function?
 	_, tokens = expect(INT_KEYWORD_TOKEN, tokens)
-	id, tokens := parseIdentifier(tokens)
-	_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
-	_, tokens = expect(VOID_KEYWORD_TOKEN, tokens)
-	_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
-	block, tokens := parseBlock(tokens)
+	name, tokens := parseIdentifier(tokens)
 
-	fn := Function{name: id, body: block}
-	return fn, tokens
+	if peekToken(tokens).tokenType == OPEN_PARENTHESIS_TOKEN {
+		// it's a function declaration or definition
+		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
+		params, tokens := parseParamList(tokens)
+		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+
+		if peekToken(tokens).tokenType == SEMICOLON_TOKEN {
+			// it's a function declaration
+			_, tokens = expect(SEMICOLON_TOKEN, tokens)
+			fn := Function_Declaration{name: name, params: params, body: nil}
+			return &fn, tokens
+		} else {
+			// it's a function definition
+			block, tokens := parseBlock(tokens)
+			fn := Function_Declaration{name: name, params: params, body: &block}
+			return &fn, tokens
+		}
+	} else {
+		// it's a variable declaration
+		decl := Variable_Declaration{name: name}
+
+		if peekToken(tokens).tokenType == EQUAL_TOKEN {
+			// it has an initializer
+			_, tokens = expect(EQUAL_TOKEN, tokens)
+			var exp Expression
+			exp, tokens = parseExpression(tokens, 0)
+			decl.initializer = exp
+		}
+		_, tokens = expect(SEMICOLON_TOKEN, tokens)
+		return &decl, tokens
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseParamList(tokens []Token) ([]string, []Token) {
+	params := []string{}
+
+	if peekToken(tokens).tokenType == VOID_KEYWORD_TOKEN {
+		_, tokens = expect(VOID_KEYWORD_TOKEN, tokens)
+	} else {
+		for peekToken(tokens).tokenType != CLOSE_PARENTHESIS_TOKEN {
+			// TODO: need to handle other data types
+			_, tokens = expect(INT_KEYWORD_TOKEN, tokens)
+			var id string
+			id, tokens = parseIdentifier(tokens)
+			params = append(params, id)
+			if peekToken(tokens).tokenType == COMMA_TOKEN {
+				_, tokens = expect(COMMA_TOKEN, tokens)
+			} else {
+				break
+			}
+		}
+	}
+
+	return params, tokens
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseArgList(tokens []Token) ([]Expression, []Token) {
+	args := []Expression{}
+
+	for peekToken(tokens).tokenType != CLOSE_PARENTHESIS_TOKEN {
+		var exp Expression
+		exp, tokens = parseExpression(tokens, 0)
+		args = append(args, exp)
+
+		if peekToken(tokens).tokenType == COMMA_TOKEN {
+			_, tokens = expect(COMMA_TOKEN, tokens)
+		} else {
+			break
+		}
+	}
+
+	return args, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -349,40 +441,27 @@ func parseBlockItem(tokens []Token) (Block_Item, []Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseDeclaration(tokens []Token) (Declaration, []Token) {
-	// TODO: need to handle other data types, expectDataType() helper function?
-	_, tokens = expect(INT_KEYWORD_TOKEN, tokens)
-	var name string
-	name, tokens = parseIdentifier(tokens)
-	decl := Declaration{name: name}
-
-	if peekToken(tokens).tokenType == EQUAL_TOKEN {
-		// it has an initializer
-		_, tokens = expect(EQUAL_TOKEN, tokens)
-		var exp Expression
-		exp, tokens = parseExpression(tokens, 0)
-		decl.initializer = exp
-	}
-
-	_, tokens = expect(SEMICOLON_TOKEN, tokens)
-
-	return decl, tokens
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-
 func parseForInitial(tokens []Token) (For_Initial_Clause, []Token) {
 	// TODO: use helper function isDataType(nextToken) to check if next token is one of the keywords int, bool, float, etc.
 	nextToken := peekToken(tokens)
 
 	if nextToken.tokenType == INT_KEYWORD_TOKEN {
 		decl, tokens := parseDeclaration(tokens)
-		return &For_Initial_Declaration{decl: decl}, tokens
+		// TODO: don't like this
+		varDecl, ok := decl.(*Variable_Declaration)
+		if ok {
+			return &For_Initial_Declaration{decl: *varDecl}, tokens
+		} else {
+			fmt.Println("Expected Variable Declaration at beginning of for loop")
+			os.Exit(1)
+		}
 	} else {
 		// must be an (optional) expression
 		exp, tokens := parseOptionalExpression(tokens, SEMICOLON_TOKEN)
 		return &For_Initial_Expression{exp: exp}, tokens
 	}
+
+	return nil, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -555,8 +634,18 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 		return &ex, tokens
 	} else if nextToken.tokenType == IDENTIFIER_TOKEN {
 		name, tokens := parseIdentifier(tokens)
-		v := Variable_Expression{name}
-		return &v, tokens
+		if peekToken(tokens).tokenType == OPEN_PARENTHESIS_TOKEN {
+			// it's a function call
+			_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
+			args, tokens := parseArgList(tokens)
+			_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+			f := Function_Call_Expression{functionName: name, args: args}
+			return &f, tokens
+		} else {
+			// it's just a variable expression
+			v := Variable_Expression{name}
+			return &v, tokens
+		}
 	} else if nextToken.tokenType == TILDE_TOKEN || nextToken.tokenType == HYPHEN_TOKEN || nextToken.tokenType == EXCLAMATION_TOKEN {
 		unopType, tokens := parseUnaryOperator(tokens)
 		innerExp, tokens := parseFactor(tokens)

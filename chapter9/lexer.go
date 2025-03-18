@@ -47,6 +47,7 @@ var regexp_while *regexp.Regexp = regexp.MustCompile(`while`)
 var regexp_for *regexp.Regexp = regexp.MustCompile(`for`)
 var regexp_break *regexp.Regexp = regexp.MustCompile(`break`)
 var regexp_continue *regexp.Regexp = regexp.MustCompile(`continue`)
+var regexp_comma *regexp.Regexp = regexp.MustCompile(`,`)
 
 type TokenEnum int
 
@@ -88,6 +89,7 @@ const (
 	FOR_KEYWORD_TOKEN
 	BREAK_KEYWORD_TOKEN
 	CONTINUE_KEYWORD_TOKEN
+	COMMA_TOKEN
 )
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -129,6 +131,7 @@ var allRegexp = map[TokenEnum]*regexp.Regexp{
 	FOR_KEYWORD_TOKEN:       regexp_for,
 	BREAK_KEYWORD_TOKEN:     regexp_break,
 	CONTINUE_KEYWORD_TOKEN:  regexp_continue,
+	COMMA_TOKEN:             regexp_comma,
 }
 
 var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{

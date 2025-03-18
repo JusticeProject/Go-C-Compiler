@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -41,13 +42,14 @@ func printWithTabs(text string, numTabs int) bool {
 	fmt.Printf("%v%v", tabString, text)
 
 	// return true if it ended with a newline
-	lastChar := text[len(text)-1]
-	if lastChar == '(' || lastChar == ')' || lastChar == ',' {
-		fmt.Printf("\n")
-		return true
-	} else {
-		return false
+	if len(text) > 0 {
+		lastChar := text[len(text)-1]
+		if lastChar == '(' || lastChar == ')' || lastChar == ',' {
+			fmt.Printf("\n")
+			return true
+		}
 	}
+	return false
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -88,8 +90,32 @@ func isLeftIndent(text string) bool {
 
 func (p *Program) getPrettyPrintLines() []string {
 	lines := []string{"Program(", doRightIndent()}
-	newLines := p.fn.getPrettyPrintLines()
-	lines = append(lines, newLines...)
+
+	for _, fn := range p.functions {
+		newLines := fn.getPrettyPrintLines()
+		lines = append(lines, newLines...)
+	}
+
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+	return lines
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+func (d *Variable_Declaration) getPrettyPrintLines() []string {
+	lines := []string{"VARIABLE_DECLARATION(", doRightIndent()}
+	lines = append(lines, "name="+string(d.name)+",")
+	lines = append(lines, "initializer=")
+	if d.initializer == nil {
+		lines = append(lines, "NONE")
+	} else {
+		moreLines := d.initializer.getPrettyPrintLines()
+		lines = append(lines, moreLines...)
+	}
+
 	lines = append(lines, doLeftIndent())
 	lines = append(lines, ")")
 	return lines
@@ -97,15 +123,29 @@ func (p *Program) getPrettyPrintLines() []string {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (f *Function) getPrettyPrintLines() []string {
-	lines := []string{"Function(", doRightIndent()}
-	lines = append(lines, "name="+string(f.name)+",")
-	lines = append(lines, "body=")
-	moreLines := f.body.getPrettyPrintLines()
-	lines = append(lines, moreLines...)
-	lines = append(lines, doLeftIndent())
-	lines = append(lines, ")")
-	return lines
+func (f *Function_Declaration) getPrettyPrintLines() []string {
+
+	if f.body == nil {
+		// function declaration
+		lines := []string{"Function_Declaration(", doRightIndent(), "name=" + f.name + ","}
+		lines = append(lines, "params=")
+		lines = append(lines, strings.Join(f.params, ","))
+		lines = append(lines, doLeftIndent())
+		lines = append(lines, ")")
+		return lines
+	} else {
+		// function definition
+		lines := []string{"Function_Definition(", doRightIndent(), "name=" + f.name + ","}
+		lines = append(lines, "params=")
+		lines = append(lines, strings.Join(f.params, ","))
+		lines = append(lines, ",")
+		lines = append(lines, "body=")
+		moreLines := f.body.getPrettyPrintLines()
+		lines = append(lines, moreLines...)
+		lines = append(lines, doLeftIndent())
+		lines = append(lines, ")")
+		return lines
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -133,26 +173,6 @@ func (b *Block_Statement) getPrettyPrintLines() []string {
 
 func (b *Block_Declaration) getPrettyPrintLines() []string {
 	return b.decl.getPrettyPrintLines()
-}
-
-//###############################################################################
-//###############################################################################
-//###############################################################################
-
-func (d *Declaration) getPrettyPrintLines() []string {
-	lines := []string{"DECLARATION(", doRightIndent()}
-	lines = append(lines, "name="+string(d.name)+",")
-	lines = append(lines, "initializer=")
-	if d.initializer == nil {
-		lines = append(lines, "NONE")
-	} else {
-		moreLines := d.initializer.getPrettyPrintLines()
-		lines = append(lines, moreLines...)
-	}
-
-	lines = append(lines, doLeftIndent())
-	lines = append(lines, ")")
-	return lines
 }
 
 //###############################################################################
@@ -384,6 +404,23 @@ func (e *Conditional_Expression) getPrettyPrintLines() []string {
 	lines = append(lines, moreLines...)
 	lines = append(lines, doLeftIndent())
 	lines = append(lines, ")")
+	return lines
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (e *Function_Call_Expression) getPrettyPrintLines() []string {
+	lines := []string{"FUNCTION_CALL(", doRightIndent(), "functionName=", e.functionName, ",", "args="}
+
+	for _, arg := range e.args {
+		moreLines := arg.getPrettyPrintLines()
+		moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+		lines = append(lines, moreLines...)
+	}
+
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+
 	return lines
 }
 
