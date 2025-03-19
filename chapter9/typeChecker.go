@@ -200,14 +200,10 @@ func typeCheckExpression(exp Expression) {
 		typeCheckExpression(convertedExp.middleExp)
 		typeCheckExpression(convertedExp.rightExp)
 	case *Function_Call_Expression:
-		entry := symbolTable[convertedExp.functionName]
-		funcType, isFuncType := entry.typ.(*Function_Type)
-		if !isFuncType {
-			fmt.Println("Variable", convertedExp.functionName, "used as function name")
-			os.Exit(1)
-		}
-		if funcType.paramCount != len(convertedExp.args) {
-			fmt.Println("Function", convertedExp.functionName, "called with wrong number of arguments")
+		existingSymbol := symbolTable[convertedExp.functionName]
+		callType := Function_Type{len(convertedExp.args)}
+		if !existingSymbol.typ.isEqual(&callType) {
+			fmt.Println("Function call to", convertedExp.functionName, "does not match any known function declaration.")
 			os.Exit(1)
 		}
 		for _, arg := range convertedExp.args {

@@ -33,16 +33,17 @@ func makeLabelName(name string) string {
 //###############################################################################
 
 type Program_Tacky struct {
-	fn Function_Tacky
+	functions []Function_Definition_Tacky
 }
 
 //###############################################################################
 //###############################################################################
 //###############################################################################
 
-type Function_Tacky struct {
-	name string
-	body []Instruction_Tacky
+type Function_Definition_Tacky struct {
+	name   string
+	params []string
+	body   []Instruction_Tacky
 }
 
 //###############################################################################
@@ -109,6 +110,14 @@ type Label_Instruction_Tacky struct {
 	name string
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+
+type Function_Call_Tacky struct {
+	funcName  string
+	args      []Value_Tacky
+	returnVal Value_Tacky
+}
+
 //###############################################################################
 //###############################################################################
 //###############################################################################
@@ -141,15 +150,51 @@ func doTackyGen(ast Program) Program_Tacky {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (pr *Program) genTacky() Program_Tacky {
-	// TODO: need to handle more than one function
-	fnTac := pr.fn.genTacky()
-	tacky := Program_Tacky{fn: fnTac}
+	tacFuncs := []Function_Definition_Tacky{}
+
+	for _, fn := range pr.functions {
+		instrs := fn.declToTacky()
+		if len(instrs) > 0 {
+			// function definitions will have at least one instruction, function declarations won't have any instructions,
+			// we will only keep the function definitions
+			tacFunc := Function_Definition_Tacky{name: fn.name, params: fn.params, body: instrs}
+			tacFuncs = append(tacFuncs, tacFunc)
+		}
+	}
+
+	tacky := Program_Tacky{functions: tacFuncs}
 	return tacky
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+func (d *Variable_Declaration) declToTacky() []Instruction_Tacky {
+	if d.initializer == nil {
+		// no instructions needed
+		return []Instruction_Tacky{}
+	} else {
+		// get the instructions for the initializer
+		instructions := []Instruction_Tacky{}
+		result, instructions := d.initializer.expToTacky(instructions)
+
+		// assign the value from the initializer to the declared variable
+		v := Variable_Value_Tacky{d.name}
+		cp := Copy_Instruction_Tacky{result, &v}
+		instructions = append(instructions, &cp)
+		return instructions
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (fn *Function) genTacky() Function_Tacky {
+func (fn *Function_Declaration) declToTacky() []Instruction_Tacky {
+	if fn.body == nil {
+		// no instructions needed
+		return []Instruction_Tacky{}
+	}
+
 	bodyTac := fn.body.blockToTacky()
 
 	// Add a return statement to the end of every function just in case the original source didn't have one.
@@ -157,10 +202,12 @@ func (fn *Function) genTacky() Function_Tacky {
 	ret := Return_Instruction_Tacky{&Constant_Value_Tacky{0}}
 	bodyTac = append(bodyTac, &ret)
 
-	return Function_Tacky{name: fn.name, body: bodyTac}
+	return bodyTac
 }
 
-/////////////////////////////////////////////////////////////////////////////////
+//###############################################################################
+//###############################################################################
+//###############################################################################
 
 func (b *Block) blockToTacky() []Instruction_Tacky {
 	instructions := []Instruction_Tacky{}
@@ -185,27 +232,6 @@ func (bi *Block_Statement) blockItemToTacky() []Instruction_Tacky {
 
 func (bi *Block_Declaration) blockItemToTacky() []Instruction_Tacky {
 	return bi.decl.declToTacky()
-}
-
-//###############################################################################
-//###############################################################################
-//###############################################################################
-
-func (d *Declaration) declToTacky() []Instruction_Tacky {
-	if d.initializer == nil {
-		// no instructions needed
-		return []Instruction_Tacky{}
-	} else {
-		// get the instructions for the initializer
-		instructions := []Instruction_Tacky{}
-		result, instructions := d.initializer.expToTacky(instructions)
-
-		// assign the value from the initializer to the declared variable
-		v := Variable_Value_Tacky{d.name}
-		cp := Copy_Instruction_Tacky{result, &v}
-		instructions = append(instructions, &cp)
-		return instructions
-	}
 }
 
 //###############################################################################
@@ -515,4 +541,22 @@ func (exp *Conditional_Expression) expToTacky(instructions []Instruction_Tacky) 
 	endLabelInstr := Label_Instruction_Tacky{endLabel}
 	instructions = append(instructions, &endLabelInstr)
 	return &result, instructions
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (e *Function_Call_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+	argsTacky := []Value_Tacky{}
+
+	for _, argExp := range e.args {
+		var argTac Value_Tacky
+		argTac, instructions = argExp.expToTacky(instructions)
+		argsTacky = append(argsTacky, argTac)
+	}
+
+	retVal := Variable_Value_Tacky{makeTempVarName("")}
+	fn := Function_Call_Tacky{funcName: e.functionName, args: argsTacky, returnVal: &retVal}
+	instructions = append(instructions, &fn)
+
+	return &retVal, instructions
 }
