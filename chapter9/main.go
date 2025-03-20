@@ -12,6 +12,8 @@ import (
 /////////////////////////////////////////////////////////////////////////////////
 
 func main() {
+	fmt.Println("Using Go version", runtime.Version())
+
 	if runtime.GOOS == "linux" {
 		doLinux()
 	} else {

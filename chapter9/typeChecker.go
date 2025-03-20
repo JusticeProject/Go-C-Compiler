@@ -72,7 +72,7 @@ func typeCheckDeclaration(decl Declaration) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func typeCheckFuncDecl(decl Function_Declaration) {
-	newTyp := Function_Type{len(decl.params)}
+	newTyp := Function_Type{paramCount: len(decl.params)}
 	hasBody := (decl.body != nil)
 	alreadyDefined := false
 
@@ -201,7 +201,7 @@ func typeCheckExpression(exp Expression) {
 		typeCheckExpression(convertedExp.rightExp)
 	case *Function_Call_Expression:
 		existingSymbol := symbolTable[convertedExp.functionName]
-		callType := Function_Type{len(convertedExp.args)}
+		callType := Function_Type{paramCount: len(convertedExp.args)}
 		if !existingSymbol.typ.isEqual(&callType) {
 			fmt.Println("Function call to", convertedExp.functionName, "does not match any known function declaration.")
 			os.Exit(1)

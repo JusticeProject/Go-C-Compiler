@@ -24,8 +24,10 @@ func doCodeEmission(asm Program_Asm, assemblyFilename string) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (asm *Program_Asm) emitAssembly(file *os.File) {
-	// TODO: need to handle more than one function
-	asm.fn.emitAssembly(file)
+	for index, _ := range asm.functions {
+		asm.functions[index].emitAssembly(file)
+	}
+
 	file.WriteString("\t.section\t.note.GNU-stack,\"\",@progbits\n")
 }
 
@@ -111,6 +113,32 @@ func (instr *Label_Instruction_Asm) instrEmitAsm(file *os.File) {
 
 func (instr *Allocate_Stack_Instruction_Asm) instrEmitAsm(file *os.File) {
 	file.WriteString("\t" + "subq" + "\t" + instr.stackSize.getOperandString(4) + ", %rsp" + "\n")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (instr *Deallocate_Stack_Instruction_Asm) instrEmitAsm(file *os.File) {
+	file.WriteString("\t" + "addq" + "\t" + instr.stackSize.getOperandString(4) + ", %rsp" + "\n")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (instr *Push_Instruction_Asm) instrEmitAsm(file *os.File) {
+	file.WriteString("\t" + "pushq" + "\t" + instr.op.getOperandString(8) + "\n")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (instr *Call_Function_Asm) instrEmitAsm(file *os.File) {
+	// need to find if the function we are calling is in the current binary object file or somewhere else
+	entry, inTable := symbolTable[instr.name]
+	if inTable && entry.defined {
+		// It must be in the table and have a definition to use this calling method. If it's in the table
+		// but not defined then it's just a function declaration so the definition is elsewhere.
+		file.WriteString("\t" + "call" + "\t" + instr.name + "\n")
+	} else {
+		file.WriteString("\t" + "call" + "\t" + instr.name + "@PLT" + "\n")
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -214,38 +242,82 @@ func getConditionalCodeString(code ConditionalCodeAsm) string {
 	return ""
 }
 
-/////////////////////////////////////////////////////////////////////////////////
+//###############################################################################
+//###############################################################################
+//###############################################################################
 
 func getRegisterString(reg RegisterTypeAsm, sizeBytes int) string {
 	switch reg {
 	case AX_REGISTER_ASM:
-		if sizeBytes == 4 {
-			return "eax"
-		} else {
-			return "al"
-		}
+		return getRegisterPrefix(sizeBytes) + "a" + getXRegisterSuffix(sizeBytes)
+	case CX_REGISTER_ASM:
+		return getRegisterPrefix(sizeBytes) + "c" + getXRegisterSuffix(sizeBytes)
 	case DX_REGISTER_ASM:
-		if sizeBytes == 4 {
-			return "edx"
-		} else {
-			return "dl"
-		}
+		return getRegisterPrefix(sizeBytes) + "d" + getXRegisterSuffix(sizeBytes)
+	case DI_REGISTER_ASM:
+		return getRegisterPrefix(sizeBytes) + "di" + getIRegisterSuffix(sizeBytes)
+	case SI_REGISTER_ASM:
+		return getRegisterPrefix(sizeBytes) + "si" + getIRegisterSuffix(sizeBytes)
+	case R8_REGISTER_ASM:
+		return "r8" + getScratchRegisterSuffix(sizeBytes)
+	case R9_REGISTER_ASM:
+		return "r9" + getScratchRegisterSuffix(sizeBytes)
 	case R10_REGISTER_ASM:
-		if sizeBytes == 4 {
-			return "r10d"
-		} else {
-			return "r10b"
-		}
+		return "r10" + getScratchRegisterSuffix(sizeBytes)
 	case R11_REGISTER_ASM:
-		if sizeBytes == 4 {
-			return "r11d"
-		} else {
-			return "r11b"
-		}
+		return "r11" + getScratchRegisterSuffix(sizeBytes)
 	default:
 		fmt.Println("unknown register:", reg)
 		os.Exit(1)
 	}
 
 	return ""
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func getRegisterPrefix(sizeBytes int) string {
+	switch sizeBytes {
+	case 8:
+		return "r"
+	case 4:
+		return "e"
+	default:
+		return ""
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func getXRegisterSuffix(sizeBytes int) string {
+	switch sizeBytes {
+	case 1:
+		return "l"
+	default:
+		return "x"
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func getIRegisterSuffix(sizeBytes int) string {
+	switch sizeBytes {
+	case 1:
+		return "l"
+	default:
+		return ""
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func getScratchRegisterSuffix(sizeBytes int) string {
+	switch sizeBytes {
+	case 8:
+		return ""
+	case 4:
+		return "d"
+	default:
+		return "b"
+	}
 }
