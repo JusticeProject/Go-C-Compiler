@@ -367,7 +367,8 @@ func parseParamList(tokens []Token) ([]string, []Token) {
 	if peekToken(tokens).tokenType == VOID_KEYWORD_TOKEN {
 		_, tokens = expect(VOID_KEYWORD_TOKEN, tokens)
 	} else {
-		for peekToken(tokens).tokenType != CLOSE_PARENTHESIS_TOKEN {
+		foundComma := false
+		for (peekToken(tokens).tokenType != CLOSE_PARENTHESIS_TOKEN) || foundComma {
 			// TODO: need to handle other data types
 			_, tokens = expect(INT_KEYWORD_TOKEN, tokens)
 			var id string
@@ -375,6 +376,7 @@ func parseParamList(tokens []Token) ([]string, []Token) {
 			params = append(params, id)
 			if peekToken(tokens).tokenType == COMMA_TOKEN {
 				_, tokens = expect(COMMA_TOKEN, tokens)
+				foundComma = true
 			} else {
 				break
 			}
@@ -388,14 +390,16 @@ func parseParamList(tokens []Token) ([]string, []Token) {
 
 func parseArgList(tokens []Token) ([]Expression, []Token) {
 	args := []Expression{}
+	foundComma := false
 
-	for peekToken(tokens).tokenType != CLOSE_PARENTHESIS_TOKEN {
+	for (peekToken(tokens).tokenType != CLOSE_PARENTHESIS_TOKEN) || foundComma {
 		var exp Expression
 		exp, tokens = parseExpression(tokens, 0)
 		args = append(args, exp)
 
 		if peekToken(tokens).tokenType == COMMA_TOKEN {
 			_, tokens = expect(COMMA_TOKEN, tokens)
+			foundComma = true
 		} else {
 			break
 		}
