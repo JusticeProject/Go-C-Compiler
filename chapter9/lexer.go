@@ -38,15 +38,15 @@ var regexp_greater_than *regexp.Regexp = regexp.MustCompile(`>`)
 var regexp_less_or_equal *regexp.Regexp = regexp.MustCompile(`<=`)
 var regexp_greater_or_equal *regexp.Regexp = regexp.MustCompile(`>=`)
 var regexp_equal *regexp.Regexp = regexp.MustCompile(`=`)
-var regexp_if *regexp.Regexp = regexp.MustCompile(`if`)
-var regexp_else *regexp.Regexp = regexp.MustCompile(`else`)
+var regexp_if_keyword *regexp.Regexp = regexp.MustCompile(`if\b`)
+var regexp_else_keyword *regexp.Regexp = regexp.MustCompile(`else\b`)
 var regexp_question *regexp.Regexp = regexp.MustCompile(`\?`)
 var regexp_colon *regexp.Regexp = regexp.MustCompile(`:`)
-var regexp_do *regexp.Regexp = regexp.MustCompile(`do`)
-var regexp_while *regexp.Regexp = regexp.MustCompile(`while`)
-var regexp_for *regexp.Regexp = regexp.MustCompile(`for`)
-var regexp_break *regexp.Regexp = regexp.MustCompile(`break`)
-var regexp_continue *regexp.Regexp = regexp.MustCompile(`continue`)
+var regexp_do_keyword *regexp.Regexp = regexp.MustCompile(`do\b`)
+var regexp_while_keyword *regexp.Regexp = regexp.MustCompile(`while\b`)
+var regexp_for_keyword *regexp.Regexp = regexp.MustCompile(`for\b`)
+var regexp_break_keyword *regexp.Regexp = regexp.MustCompile(`break\b`)
+var regexp_continue_keyword *regexp.Regexp = regexp.MustCompile(`continue\b`)
 var regexp_comma *regexp.Regexp = regexp.MustCompile(`,`)
 
 type TokenEnum int
@@ -122,15 +122,15 @@ var allRegexp = map[TokenEnum]*regexp.Regexp{
 	LESS_OR_EQUAL_TOKEN:     regexp_less_or_equal,
 	GREATER_OR_EQUAL_TOKEN:  regexp_greater_or_equal,
 	EQUAL_TOKEN:             regexp_equal,
-	IF_KEYWORD_TOKEN:        regexp_if,
-	ELSE_KEYWORD_TOKEN:      regexp_else,
+	IF_KEYWORD_TOKEN:        regexp_if_keyword,
+	ELSE_KEYWORD_TOKEN:      regexp_else_keyword,
 	QUESTION_TOKEN:          regexp_question,
 	COLON_TOKEN:             regexp_colon,
-	DO_KEYWORD_TOKEN:        regexp_do,
-	WHILE_KEYWORD_TOKEN:     regexp_while,
-	FOR_KEYWORD_TOKEN:       regexp_for,
-	BREAK_KEYWORD_TOKEN:     regexp_break,
-	CONTINUE_KEYWORD_TOKEN:  regexp_continue,
+	DO_KEYWORD_TOKEN:        regexp_do_keyword,
+	WHILE_KEYWORD_TOKEN:     regexp_while_keyword,
+	FOR_KEYWORD_TOKEN:       regexp_for_keyword,
+	BREAK_KEYWORD_TOKEN:     regexp_break_keyword,
+	CONTINUE_KEYWORD_TOKEN:  regexp_continue_keyword,
 	COMMA_TOKEN:             regexp_comma,
 }
 
@@ -138,13 +138,13 @@ var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{
 	INT_KEYWORD_TOKEN:      regexp_int_keyword,
 	VOID_KEYWORD_TOKEN:     regexp_void_keyword,
 	RETURN_KEYWORD_TOKEN:   regexp_return_keyword,
-	IF_KEYWORD_TOKEN:       regexp_if,
-	ELSE_KEYWORD_TOKEN:     regexp_else,
-	DO_KEYWORD_TOKEN:       regexp_do,
-	WHILE_KEYWORD_TOKEN:    regexp_while,
-	FOR_KEYWORD_TOKEN:      regexp_for,
-	BREAK_KEYWORD_TOKEN:    regexp_break,
-	CONTINUE_KEYWORD_TOKEN: regexp_continue,
+	IF_KEYWORD_TOKEN:       regexp_if_keyword,
+	ELSE_KEYWORD_TOKEN:     regexp_else_keyword,
+	DO_KEYWORD_TOKEN:       regexp_do_keyword,
+	WHILE_KEYWORD_TOKEN:    regexp_while_keyword,
+	FOR_KEYWORD_TOKEN:      regexp_for_keyword,
+	BREAK_KEYWORD_TOKEN:    regexp_break_keyword,
+	CONTINUE_KEYWORD_TOKEN: regexp_continue_keyword,
 }
 
 /////////////////////////////////////////////////////////////////////////////////
