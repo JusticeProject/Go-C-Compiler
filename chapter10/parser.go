@@ -11,7 +11,7 @@ import (
 //###############################################################################
 
 type Program struct {
-	functions []Function_Declaration
+	decls []Declaration
 }
 
 //###############################################################################
@@ -24,15 +24,38 @@ type Declaration interface {
 }
 
 type Variable_Declaration struct {
-	name        string
-	initializer Expression
+	name         string
+	initializer  Expression
+	storageClass StorageClassEnum
 }
 
 type Function_Declaration struct {
 	name string
 	// TODO: will need to change string to Identifier which will hold a string and a type?
-	params []string
-	body   *Block
+	params       []string
+	body         *Block
+	storageClass StorageClassEnum
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type StorageClassEnum int
+
+const (
+	NONE_STORAGE_CLASS StorageClassEnum = iota
+	STATIC_STORAGE_CLASS
+	EXTERN_STORAGE_CLASS
+)
+
+func getStorageClass(token Token) StorageClassEnum {
+	switch token.tokenType {
+	case STATIC_KEYWORD_TOKEN:
+		return STATIC_STORAGE_CLASS
+	case EXTERN_KEYWORD_TOKEN:
+		return EXTERN_STORAGE_CLASS
+	default:
+		return NONE_STORAGE_CLASS
+	}
 }
 
 //###############################################################################
@@ -302,28 +325,31 @@ func doParser(tokens []Token) Program {
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseProgram(tokens []Token) (Program, []Token) {
-	functions := []Function_Declaration{}
+	decls := []Declaration{}
 
-	// TODO: change to nextToken isDataType()
-	for peekToken(tokens).tokenType == INT_KEYWORD_TOKEN {
+	for {
 		var decl Declaration
 		decl, tokens = parseDeclaration(tokens)
-		fnDecl, ok := decl.(*Function_Declaration)
-		if ok {
-			functions = append(functions, *fnDecl)
+		if decl == nil {
+			break
+		} else {
+			decls = append(decls, decl)
 		}
-
 	}
 
-	pr := Program{functions: functions}
+	pr := Program{decls: decls}
 	return pr, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseDeclaration(tokens []Token) (Declaration, []Token) {
-	// TODO: need to handle other data types, expectDataType() helper function?
-	_, tokens = expect(INT_KEYWORD_TOKEN, tokens)
+	var specifiers []Token
+	specifiers, tokens = parseSpecifiers(tokens)
+	if len(specifiers) == 0 {
+		return nil, tokens
+	}
+	_, storageClass := analyzeTypeAndStorageClass(specifiers)
 	name, tokens := parseIdentifier(tokens)
 
 	if peekToken(tokens).tokenType == OPEN_PARENTHESIS_TOKEN {
@@ -335,17 +361,17 @@ func parseDeclaration(tokens []Token) (Declaration, []Token) {
 		if peekToken(tokens).tokenType == SEMICOLON_TOKEN {
 			// it's a function declaration
 			_, tokens = expect(SEMICOLON_TOKEN, tokens)
-			fn := Function_Declaration{name: name, params: params, body: nil}
+			fn := Function_Declaration{name: name, params: params, body: nil, storageClass: storageClass}
 			return &fn, tokens
 		} else {
 			// it's a function definition
 			block, tokens := parseBlock(tokens)
-			fn := Function_Declaration{name: name, params: params, body: &block}
+			fn := Function_Declaration{name: name, params: params, body: &block, storageClass: storageClass}
 			return &fn, tokens
 		}
 	} else {
 		// it's a variable declaration
-		decl := Variable_Declaration{name: name}
+		decl := Variable_Declaration{name: name, storageClass: storageClass}
 
 		if peekToken(tokens).tokenType == EQUAL_TOKEN {
 			// it has an initializer
@@ -361,6 +387,66 @@ func parseDeclaration(tokens []Token) (Declaration, []Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func parseSpecifiers(tokens []Token) ([]Token, []Token) {
+	specifiers := []Token{}
+
+	for isSpecifier(peekToken(tokens)) {
+		var spec Token
+		spec, tokens = takeToken(tokens)
+		specifiers = append(specifiers, spec)
+	}
+
+	return specifiers, tokens
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func isSpecifier(token Token) bool {
+	switch token.tokenType {
+	case INT_KEYWORD_TOKEN:
+		return true
+	case STATIC_KEYWORD_TOKEN:
+		return true
+	case EXTERN_KEYWORD_TOKEN:
+		return true
+	default:
+		return false
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func analyzeTypeAndStorageClass(specifiers []Token) (Data_Type, StorageClassEnum) {
+	types := []Data_Type{}
+	storageClasses := []StorageClassEnum{}
+	for _, spec := range specifiers {
+		if spec.tokenType == INT_KEYWORD_TOKEN {
+			// TODO: other data types, isDataType()?
+			types = append(types, &Int_Type{})
+		} else {
+			storageClass := getStorageClass(spec)
+			storageClasses = append(storageClasses, storageClass)
+		}
+	}
+
+	if len(types) != 1 {
+		fmt.Println("Invalid type specifier")
+		os.Exit(1)
+	}
+	if len(storageClasses) > 1 {
+		fmt.Println("Invalid storage class")
+		os.Exit(1)
+	}
+
+	if len(storageClasses) == 1 {
+		return types[0], storageClasses[0]
+	} else {
+		return types[0], NONE_STORAGE_CLASS
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func parseParamList(tokens []Token) ([]string, []Token) {
 	params := []string{}
 
@@ -369,7 +455,7 @@ func parseParamList(tokens []Token) ([]string, []Token) {
 	} else {
 		foundComma := false
 		for (peekToken(tokens).tokenType != CLOSE_PARENTHESIS_TOKEN) || foundComma {
-			// TODO: need to handle other data types
+			// TODO: need to handle other data types, static and extern are not allowed for params
 			_, tokens = expect(INT_KEYWORD_TOKEN, tokens)
 			var id string
 			id, tokens = parseIdentifier(tokens)
@@ -428,9 +514,8 @@ func parseBlock(tokens []Token) (Block, []Token) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseBlockItem(tokens []Token) (Block_Item, []Token) {
-	firstToken := peekToken(tokens)
 	// TODO: need to handle other data types
-	if firstToken.tokenType == INT_KEYWORD_TOKEN {
+	if isSpecifier(peekToken(tokens)) {
 		// it's a declaration
 		decl, tokens := parseDeclaration(tokens)
 		declBlock := Block_Declaration{decl}
@@ -451,7 +536,6 @@ func parseForInitial(tokens []Token) (For_Initial_Clause, []Token) {
 
 	if nextToken.tokenType == INT_KEYWORD_TOKEN {
 		decl, tokens := parseDeclaration(tokens)
-		// TODO: don't like this
 		varDecl, ok := decl.(*Variable_Declaration)
 		if ok {
 			return &For_Initial_Declaration{decl: *varDecl}, tokens
