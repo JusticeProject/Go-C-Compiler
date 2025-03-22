@@ -1,26 +1,23 @@
-int sum(int a, int b);
 int putchar(int c);
 
-int main(void) {
-    putchar(72);
-    putchar(101);
-    putchar(108);
-    putchar(108);
-    putchar(111);
-    putchar(44);
-    putchar(32);
-    putchar(87);
-    putchar(111);
-    putchar(114);
-    putchar(108);
-    putchar(100);
-    putchar(33);
-    putchar(10);
+int fibonacci(void) {
+    static int n = -1;
+    static int np1 = 1;
 
-    int a = sum(1, 2);
-    return a;
+    int np2 = n + np1;
+
+    n = np1;
+    np1 = np2;
+
+    return np2;
 }
 
-int sum(int a, int b) {
-    return a + b;
+int main(void) {
+    int result = 0;
+    for (int i = 0; i <= 6; i=i+1) {
+        result = fibonacci();
+        putchar(result + 48);
+    }
+    putchar(10);
+    return result;
 }

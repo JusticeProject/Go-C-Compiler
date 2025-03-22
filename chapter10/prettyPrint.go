@@ -91,8 +91,8 @@ func isLeftIndent(text string) bool {
 func (p *Program) getPrettyPrintLines() []string {
 	lines := []string{"Program(", doRightIndent()}
 
-	for _, fn := range p.functions {
-		newLines := fn.getPrettyPrintLines()
+	for _, decl := range p.decls {
+		newLines := decl.getPrettyPrintLines()
 		lines = append(lines, newLines...)
 	}
 
@@ -115,6 +115,8 @@ func (d *Variable_Declaration) getPrettyPrintLines() []string {
 		moreLines := d.initializer.getPrettyPrintLines()
 		lines = append(lines, moreLines...)
 	}
+	lines = append(lines, ",")
+	lines = append(lines, "storageClass="+getPrettyPrintStorageClass(d.storageClass))
 
 	lines = append(lines, doLeftIndent())
 	lines = append(lines, ")")
@@ -130,6 +132,8 @@ func (f *Function_Declaration) getPrettyPrintLines() []string {
 		lines := []string{"Function_Declaration(", doRightIndent(), "name=" + f.name + ","}
 		lines = append(lines, "params=")
 		lines = append(lines, strings.Join(f.params, ","))
+		lines = append(lines, ",")
+		lines = append(lines, "storageClass="+getPrettyPrintStorageClass(f.storageClass))
 		lines = append(lines, doLeftIndent())
 		lines = append(lines, ")")
 		return lines
@@ -142,6 +146,8 @@ func (f *Function_Declaration) getPrettyPrintLines() []string {
 		lines = append(lines, "body=")
 		moreLines := f.body.getPrettyPrintLines()
 		lines = append(lines, moreLines...)
+		lines = append(lines, ",")
+		lines = append(lines, "storageClass="+getPrettyPrintStorageClass(f.storageClass))
 		lines = append(lines, doLeftIndent())
 		lines = append(lines, ")")
 		return lines
@@ -479,5 +485,19 @@ func getPrettyPrintBinary(typ BinaryOperatorType) string {
 		os.Exit(1)
 	}
 
+	return ""
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func getPrettyPrintStorageClass(stCl StorageClassEnum) string {
+	switch stCl {
+	case NONE_STORAGE_CLASS:
+		return "NONE"
+	case STATIC_STORAGE_CLASS:
+		return "STATIC"
+	case EXTERN_STORAGE_CLASS:
+		return "EXTERN"
+	}
 	return ""
 }
