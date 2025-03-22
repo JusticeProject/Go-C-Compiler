@@ -10,8 +10,11 @@ import (
 //###############################################################################
 
 func doLoopLabeling(ast Program) Program {
-	for index, _ := range ast.functions {
-		ast.functions[index] = labelFunction(ast.functions[index])
+	for index, _ := range ast.decls {
+		fnDecl, isFunc := ast.decls[index].(*Function_Declaration)
+		if isFunc {
+			ast.decls[index] = labelFunction(*fnDecl)
+		}
 	}
 
 	return ast
@@ -19,14 +22,14 @@ func doLoopLabeling(ast Program) Program {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func labelFunction(fn Function_Declaration) Function_Declaration {
+func labelFunction(fn Function_Declaration) Declaration {
 	if fn.body == nil {
-		return fn
+		return &fn
 	}
 
 	tempBody := labelBlock(*fn.body, "")
 	fn.body = &tempBody
-	return fn
+	return &fn
 }
 
 /////////////////////////////////////////////////////////////////////////////////

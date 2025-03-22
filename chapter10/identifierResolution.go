@@ -35,11 +35,25 @@ func doIdentifierResolution(ast Program) Program {
 	// value = struct containing globally unique name and bool flag indicating whether it was declared in current scope.
 	// maps in Go are passed by reference to a function, so you don't need to pass a map by pointer.
 	identifierMap := make(map[string]Identifier_Info)
-	for index, _ := range ast.functions {
-		ast.functions[index] = resolveFunctionDeclaration(ast.functions[index], identifierMap)
+	for index, _ := range ast.decls {
+		ast.decls[index] = resolveFileScopeDeclaration(ast.decls[index], identifierMap)
 	}
 
 	return ast
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func resolveFileScopeDeclaration(decl Declaration, identifierMap map[string]Identifier_Info) Declaration {
+	switch convertedDecl := decl.(type) {
+	case *Function_Declaration:
+		newDecl := resolveFunctionDeclaration(*convertedDecl, identifierMap)
+		return &newDecl
+	case *Variable_Declaration:
+		newDecl := resolveFileScopeVariableDeclaration(*convertedDecl, identifierMap)
+		return &newDecl
+	}
+	return nil
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -89,23 +103,37 @@ func resolveParam(param string, identifierMap map[string]Identifier_Info) string
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func resolveVariableDeclaration(decl Variable_Declaration, identifierMap map[string]Identifier_Info) Variable_Declaration {
-	idInfo, nameExists := identifierMap[decl.name]
+func resolveFileScopeVariableDeclaration(decl Variable_Declaration, identifierMap map[string]Identifier_Info) Variable_Declaration {
+	identifierMap[decl.name] = Identifier_Info{uniqueName: decl.name, fromCurrentScope: true, hasLinkage: true}
+	return decl
+}
 
-	if nameExists && idInfo.fromCurrentScope {
-		fmt.Println("Semantic error. Variable", decl.name, "declared more than once in same scope.")
-		os.Exit(1)
+/////////////////////////////////////////////////////////////////////////////////
+
+func resolveLocalVariableDeclaration(decl Variable_Declaration, identifierMap map[string]Identifier_Info) Variable_Declaration {
+	prevEntry, nameExists := identifierMap[decl.name]
+
+	if nameExists && prevEntry.fromCurrentScope {
+		if (!prevEntry.hasLinkage) || (decl.storageClass != EXTERN_STORAGE_CLASS) {
+			fmt.Println("Semantic error. Conflicting local declarations of variable", decl.name)
+			os.Exit(1)
+		}
 	}
 
-	uniqueName := makeTempVarName(decl.name)
-	identifierMap[decl.name] = Identifier_Info{uniqueName: uniqueName, fromCurrentScope: true, hasLinkage: false}
+	if decl.storageClass == EXTERN_STORAGE_CLASS {
+		identifierMap[decl.name] = Identifier_Info{uniqueName: decl.name, fromCurrentScope: true, hasLinkage: true}
+		return decl
+	} else {
+		uniqueName := makeTempVarName(decl.name)
+		identifierMap[decl.name] = Identifier_Info{uniqueName: uniqueName, fromCurrentScope: true, hasLinkage: false}
 
-	var init Expression = nil
-	if decl.initializer != nil {
-		init = resolveExpression(decl.initializer, identifierMap)
+		var init Expression = nil
+		if decl.initializer != nil {
+			init = resolveExpression(decl.initializer, identifierMap)
+		}
+
+		return Variable_Declaration{name: uniqueName, initializer: init, storageClass: decl.storageClass}
 	}
-
-	return Variable_Declaration{name: uniqueName, initializer: init}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -131,12 +159,16 @@ func resolveBlockItem(existingItem Block_Item, identifierMap map[string]Identifi
 	case *Block_Declaration:
 		decl, isVarDecl := convertedItem.decl.(*Variable_Declaration)
 		if isVarDecl {
-			newDecl := resolveVariableDeclaration(*decl, identifierMap)
+			newDecl := resolveLocalVariableDeclaration(*decl, identifierMap)
 			return &Block_Declaration{&newDecl}
 		} else {
 			funcDecl := convertedItem.decl.(*Function_Declaration)
 			if funcDecl.body != nil {
 				fmt.Println("Semantic error. Local function declaration can not have a body:", funcDecl.name)
+				os.Exit(1)
+			}
+			if funcDecl.storageClass == STATIC_STORAGE_CLASS {
+				fmt.Println("Semantic error. Block scope function declaration can not be static:", funcDecl.name)
 				os.Exit(1)
 			}
 			newDecl := resolveFunctionDeclaration(*funcDecl, identifierMap)
@@ -156,7 +188,7 @@ func resolveForInit(fi For_Initial_Clause, identifierMap map[string]Identifier_I
 	switch convertedInit := fi.(type) {
 	case *For_Initial_Declaration:
 		// TODO: change to Declaration then back to Variable_Declaration?
-		newDecl := resolveVariableDeclaration(convertedInit.decl, identifierMap)
+		newDecl := resolveLocalVariableDeclaration(convertedInit.decl, identifierMap)
 		return &For_Initial_Declaration{decl: newDecl}
 	case *For_Initial_Expression:
 		newExp := resolveExpression(convertedInit.exp, identifierMap)
