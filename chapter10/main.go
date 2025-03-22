@@ -245,3 +245,11 @@ func loadFile(filename string) string {
 	data, _ := os.ReadFile(filename)
 	return string(data)
 }
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func fail(msg ...string) {
+	joinedMsg := strings.Join(msg, " ")
+	fmt.Println(joinedMsg)
+	os.Exit(1)
+}

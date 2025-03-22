@@ -1,10 +1,5 @@
 package main
 
-import (
-	"fmt"
-	"os"
-)
-
 /////////////////////////////////////////////////////////////////////////////////
 
 type Data_Type interface {
@@ -39,9 +34,81 @@ func (t *Function_Type) isEqual(input Data_Type) bool {
 //###############################################################################
 //###############################################################################
 
-type Symbol struct {
-	typ     Data_Type
+type Initial_Value interface {
+	isConstantValue() bool
+	isTentative() bool
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Tentative struct{}
+
+func (t *Tentative) isConstantValue() bool { return false }
+func (t *Tentative) isTentative() bool     { return true }
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Initial_Int struct {
+	value int32
+}
+
+func (i *Initial_Int) isConstantValue() bool { return true }
+func (i *Initial_Int) isTentative() bool     { return false }
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type No_Initializer struct{}
+
+func (n *No_Initializer) isConstantValue() bool { return false }
+func (n *No_Initializer) isTentative() bool     { return false }
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+type Identifier_Attributes interface {
+	isGlobalAttribute() bool
+	isConstant() bool
+	isTentative() bool
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Function_Attributes struct {
 	defined bool
+	global  bool
+}
+
+func (f *Function_Attributes) isGlobalAttribute() bool { return f.global }
+func (f *Function_Attributes) isConstant() bool        { return false }
+func (f *Function_Attributes) isTentative() bool       { return false }
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Static_Attributes struct {
+	init   Initial_Value
+	global bool
+}
+
+func (s *Static_Attributes) isGlobalAttribute() bool { return s.global }
+func (s *Static_Attributes) isConstant() bool        { return s.init.isConstantValue() }
+func (s *Static_Attributes) isTentative() bool       { return s.init.isTentative() }
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Local_Attributes struct{}
+
+func (l *Local_Attributes) isGlobalAttribute() bool { return false }
+func (l *Local_Attributes) isConstant() bool        { return false }
+func (l *Local_Attributes) isTentative() bool       { return false }
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+type Symbol struct {
+	typ   Data_Type
+	attrs Identifier_Attributes
 }
 
 var symbolTable = make(map[string]Symbol)
@@ -51,8 +118,8 @@ var symbolTable = make(map[string]Symbol)
 //###############################################################################
 
 func doTypeChecking(ast Program) Program {
-	for index, _ := range ast.functions {
-		typeCheckFuncDecl(ast.functions[index])
+	for index, _ := range ast.decls {
+		typeCheckFileScopeDeclaration(ast.decls[index])
 	}
 
 	return ast
@@ -60,12 +127,12 @@ func doTypeChecking(ast Program) Program {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckDeclaration(decl Declaration) {
+func typeCheckFileScopeDeclaration(decl Declaration) {
 	switch convertedDecl := decl.(type) {
 	case *Function_Declaration:
 		typeCheckFuncDecl(*convertedDecl)
 	case *Variable_Declaration:
-		typeCheckVarDecl(*convertedDecl)
+		typeCheckFileScopeVarDecl(*convertedDecl)
 	}
 }
 
@@ -75,25 +142,31 @@ func typeCheckFuncDecl(decl Function_Declaration) {
 	newTyp := Function_Type{paramCount: len(decl.params)}
 	hasBody := (decl.body != nil)
 	alreadyDefined := false
+	global := (decl.storageClass != STATIC_STORAGE_CLASS)
 
 	oldDecl, inSymbolTable := symbolTable[decl.name]
 	if inSymbolTable {
 		if !oldDecl.typ.isEqual(&newTyp) {
-			fmt.Println("Incompatible function declarations:", decl.name, newTyp.paramCount, "params")
-			fmt.Println("does not match previous declaration of", decl.name)
-			os.Exit(1)
+			fail("Incompatible function declarations for function", decl.name)
 		}
-		alreadyDefined = oldDecl.defined
+		oldAttrs, _ := oldDecl.attrs.(*Function_Attributes)
+		alreadyDefined = oldAttrs.defined
 		if alreadyDefined && hasBody {
-			fmt.Println("Function", decl.name, "has two definitions.")
-			os.Exit(1)
+			fail("Function", decl.name, "has two definitions.")
 		}
+
+		if oldAttrs.global && decl.storageClass == STATIC_STORAGE_CLASS {
+			fail("Static function declaration follows non-static declaration of", decl.name)
+		}
+		global = oldAttrs.global
 	}
 
-	symbolTable[decl.name] = Symbol{typ: &newTyp, defined: (alreadyDefined || hasBody)}
+	attrs := Function_Attributes{defined: (alreadyDefined || hasBody), global: global}
+	symbolTable[decl.name] = Symbol{typ: &newTyp, attrs: &attrs}
 
 	if hasBody {
 		for _, param := range decl.params {
+			// every variable should have a unique name at this point, so it won't conflict with any existing entry
 			symbolTable[param] = Symbol{typ: &Int_Type{}}
 		}
 		typeCheckBlock(*decl.body)
@@ -102,13 +175,87 @@ func typeCheckFuncDecl(decl Function_Declaration) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckVarDecl(decl Variable_Declaration) {
+func typeCheckFileScopeVarDecl(decl Variable_Declaration) {
+	// every variable should have a unique name at this point, so it won't conflict with any existing entry
+	// TODO: need to handle other data types, could pass the initializer to a function and get a value back
+	var init Initial_Value = nil
+	constIntExp, isConst := decl.initializer.(*Constant_Int_Expression)
+	if isConst {
+		init = &Initial_Int{value: constIntExp.intValue}
+	} else if decl.initializer == nil {
+		if decl.storageClass == EXTERN_STORAGE_CLASS {
+			init = &No_Initializer{}
+		} else {
+			init = &Tentative{}
+		}
+	} else {
+		fail("Non-constant initializer for variable", decl.name)
+	}
+
+	global := (decl.storageClass != STATIC_STORAGE_CLASS)
+
+	oldDecl, alreadyExists := symbolTable[decl.name]
+	if alreadyExists {
+		_, isFunc := oldDecl.typ.(*Function_Type)
+		if isFunc {
+			fail("Function redeclared as variable", decl.name)
+		}
+		if decl.storageClass == EXTERN_STORAGE_CLASS {
+			global = oldDecl.attrs.isGlobalAttribute()
+		} else if oldDecl.attrs.isGlobalAttribute() != global {
+			fail("Conflicting variable linkage")
+		}
+
+		if oldDecl.attrs.isConstant() {
+			if init.isConstantValue() {
+				fail("Conflicting file scope variable declarations")
+			} else {
+				init = oldDecl.attrs.(*Static_Attributes).init
+			}
+		} else if !init.isConstantValue() && oldDecl.attrs.isTentative() {
+			init = &Tentative{}
+		}
+	}
+
+	attrs := Static_Attributes{init: init, global: global}
+	symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: &attrs}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func typeCheckLocalVarDecl(decl Variable_Declaration) {
 	// every variable should have a unique name at this point, so it won't conflict with any existing entry
 	// TODO: need to handle other data types
-	symbolTable[decl.name] = Symbol{typ: &Int_Type{}}
-
-	if decl.initializer != nil {
-		typeCheckExpression(decl.initializer)
+	if decl.storageClass == EXTERN_STORAGE_CLASS {
+		if decl.initializer != nil {
+			fail("Initializer on local extern variable declaration")
+		}
+		oldDecl, alreadyExists := symbolTable[decl.name]
+		if alreadyExists {
+			_, isFunc := oldDecl.typ.(*Function_Type)
+			if isFunc {
+				fail("Function redeclared as variable")
+			}
+		} else {
+			symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: &Static_Attributes{init: &No_Initializer{}, global: true}}
+		}
+	} else if decl.storageClass == STATIC_STORAGE_CLASS {
+		// TODO: need to handle other data types
+		var init Initial_Value
+		constIntExp, isConstInt := decl.initializer.(*Constant_Int_Expression)
+		if isConstInt {
+			init = &Initial_Int{value: constIntExp.intValue}
+		} else if decl.initializer == nil {
+			init = &Initial_Int{value: 0}
+		} else {
+			fail("Non-constant initializer on local static variable")
+		}
+		symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: &Static_Attributes{init: init, global: false}}
+	} else {
+		symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: &Local_Attributes{}}
+		if decl.initializer != nil {
+			typeCheckExpression(decl.initializer)
+		}
 	}
 }
 
@@ -127,7 +274,13 @@ func typeCheckBlockItem(bi Block_Item) {
 	case *Block_Statement:
 		typeCheckStatement(convertedItem.st)
 	case *Block_Declaration:
-		typeCheckDeclaration(convertedItem.decl)
+		decl, isVarDecl := convertedItem.decl.(*Variable_Declaration)
+		if isVarDecl {
+			typeCheckLocalVarDecl(*decl)
+		} else {
+			funcDecl := convertedItem.decl.(*Function_Declaration)
+			typeCheckFuncDecl(*funcDecl)
+		}
 	}
 }
 
@@ -170,7 +323,10 @@ func typeCheckStatement(st Statement) {
 func typeCheckForInitial(initial For_Initial_Clause) {
 	switch convertedInit := initial.(type) {
 	case *For_Initial_Declaration:
-		typeCheckVarDecl(convertedInit.decl)
+		if convertedInit.decl.storageClass != NONE_STORAGE_CLASS {
+			fail("For loop initializer can not have storage-class specifier")
+		}
+		typeCheckLocalVarDecl(convertedInit.decl)
 	case *For_Initial_Expression:
 		typeCheckExpression(convertedInit.exp)
 	}
@@ -184,8 +340,7 @@ func typeCheckExpression(exp Expression) {
 		entry := symbolTable[convertedExp.name]
 		_, isFuncType := entry.typ.(*Function_Type)
 		if isFuncType {
-			fmt.Println("Function name", convertedExp.name, "used as variable")
-			os.Exit(1)
+			fail("Function name", convertedExp.name, "used as variable")
 		}
 	case *Unary_Expression:
 		typeCheckExpression(convertedExp.innerExp)
@@ -203,8 +358,7 @@ func typeCheckExpression(exp Expression) {
 		existingSymbol := symbolTable[convertedExp.functionName]
 		callType := Function_Type{paramCount: len(convertedExp.args)}
 		if !existingSymbol.typ.isEqual(&callType) {
-			fmt.Println("Function call to", convertedExp.functionName, "does not match any known function declaration.")
-			os.Exit(1)
+			fail("Function call to", convertedExp.functionName, "does not match any known function declaration.")
 		}
 		for _, arg := range convertedExp.args {
 			typeCheckExpression(arg)
