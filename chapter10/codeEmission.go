@@ -24,8 +24,8 @@ func doCodeEmission(asm Program_Asm, assemblyFilename string) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (asm *Program_Asm) emitAssembly(file *os.File) {
-	for index, _ := range asm.functions {
-		asm.functions[index].emitAssembly(file)
+	for index, _ := range asm.topItems {
+		asm.topItems[index].topLevelEmitAsm(file)
 	}
 
 	file.WriteString("\t.section\t.note.GNU-stack,\"\",@progbits\n")
@@ -33,8 +33,11 @@ func (asm *Program_Asm) emitAssembly(file *os.File) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (fn *Function_Asm) emitAssembly(file *os.File) {
-	file.WriteString("\t.globl " + string(fn.name) + "\n")
+func (fn *Function_Asm) topLevelEmitAsm(file *os.File) {
+	if fn.global {
+		file.WriteString("\t.globl " + fn.name + "\n")
+	}
+	file.WriteString("\t.text\n")
 	file.WriteString(string(fn.name) + ":\n")
 
 	// include the function prologue instructions for preparing the stack
@@ -43,6 +46,26 @@ func (fn *Function_Asm) emitAssembly(file *os.File) {
 
 	for _, instr := range fn.instructions {
 		instr.instrEmitAsm(file)
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
+	if st.global {
+		file.WriteString("\t" + ".globl " + st.name + "\n")
+	}
+
+	if st.initialValue == 0 {
+		file.WriteString("\t" + ".bss" + "\n")
+		file.WriteString("\t" + ".align 4" + "\n")
+		file.WriteString(st.name + ":\n")
+		file.WriteString("\t" + ".zero 4" + "\n")
+	} else {
+		file.WriteString("\t" + ".data" + "\n")
+		file.WriteString("\t" + ".align 4" + "\n")
+		file.WriteString(st.name + ":\n")
+		file.WriteString("\t" + ".long " + strconv.FormatInt(int64(st.initialValue), 10) + "\n")
 	}
 }
 
@@ -132,7 +155,7 @@ func (instr *Push_Instruction_Asm) instrEmitAsm(file *os.File) {
 func (instr *Call_Function_Asm) instrEmitAsm(file *os.File) {
 	// need to find if the function we are calling is in the current binary object file or somewhere else
 	entry, inTable := symbolTable[instr.name]
-	if inTable && entry.defined {
+	if inTable && entry.attrs.(*Function_Attributes).defined {
 		// It must be in the table and have a definition to use this calling method. If it's in the table
 		// but not defined then it's just a function declaration so the definition is elsewhere.
 		file.WriteString("\t" + "call" + "\t" + instr.name + "\n")
@@ -214,6 +237,12 @@ func (op *Pseudoregister_Operand_Asm) getOperandString(sizeBytes int) string {
 
 func (op *Stack_Operand_Asm) getOperandString(sizeBytes int) string {
 	return strconv.FormatInt(int64(op.value), 10) + "(%rbp)"
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (op *Data_Operand_Asm) getOperandString(sizeBytes int) string {
+	return op.name + "(%rip)"
 }
 
 //###############################################################################

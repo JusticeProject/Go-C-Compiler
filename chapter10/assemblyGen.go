@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 )
 
@@ -19,17 +18,34 @@ func minInt(a, b int) int {
 //###############################################################################
 
 type Program_Asm struct {
-	functions []Function_Asm
+	topItems []Top_Level_Asm
 }
 
 //###############################################################################
 //###############################################################################
 //###############################################################################
 
+type Top_Level_Asm interface {
+	replacePseudoregisters(nameToOffset map[string]int32)
+	fixInvalidInstr()
+	topLevelEmitAsm(file *os.File)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 type Function_Asm struct {
 	name         string
+	global       bool
 	instructions []Instruction_Asm
 	stackSize    int32
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Static_Variable_Asm struct {
+	name         string
+	global       bool
+	initialValue int32
 }
 
 //###############################################################################
@@ -154,11 +170,9 @@ func convertUnaryOpToAsm(unOp UnaryOperatorType) UnaryOperatorTypeAsm {
 	case NEGATE_OPERATOR:
 		return NEGATE_OPERATOR_ASM
 	case NOT_OPERATOR:
-		fmt.Println("NOT_OPERATOR not converted directly to Asm")
-		os.Exit(1)
+		fail("NOT_OPERATOR not converted directly to Asm")
 	default:
-		fmt.Println("unknown UnaryOperatorType:", unOp)
-		os.Exit(1)
+		fail("unknown UnaryOperatorType:")
 	}
 	return NOP_UNARY_ASM
 }
@@ -186,8 +200,7 @@ func convertBinaryOpToAsm(binOp BinaryOperatorType) BinaryOperatorTypeAsm {
 	case MULTIPLY_OPERATOR:
 		return MULT_OPERATOR_ASM
 	default:
-		fmt.Println("unknown BinaryOperatorType:", binOp)
-		os.Exit(1)
+		fail("unknown BinaryOperatorType:")
 	}
 	return NOP_BINARY_ASM
 }
@@ -224,6 +237,12 @@ type Stack_Operand_Asm struct {
 	value int32
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+
+type Data_Operand_Asm struct {
+	name string
+}
+
 //###############################################################################
 //###############################################################################
 //###############################################################################
@@ -255,8 +274,7 @@ func convertBinaryOpToCondition(binOp BinaryOperatorType) ConditionalCodeAsm {
 	case GREATER_OR_EQUAL_OPERATOR:
 		return GREATER_OR_EQUAL_CODE_ASM
 	default:
-		fmt.Println("unknown BinaryOperatorType when converting to code:", binOp)
-		os.Exit(1)
+		fail("unknown BinaryOperatorType when converting to code")
 	}
 
 	return NONE_CODE_ASM
@@ -297,21 +315,21 @@ func doAssemblyGen(tacky Program_Tacky) Program_Asm {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (pr *Program_Tacky) convertToAsm() Program_Asm {
-	functions := []Function_Asm{}
+	topItems := []Top_Level_Asm{}
 
-	for _, fnTac := range pr.functions {
-		fnAsm := fnTac.convertToAsm()
-		functions = append(functions, fnAsm)
+	for _, item := range pr.topItems {
+		itemAsm := item.topLevelToAsm()
+		topItems = append(topItems, itemAsm)
 	}
 
-	asm := Program_Asm{functions: functions}
+	asm := Program_Asm{topItems: topItems}
 	return asm
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (fn *Function_Definition_Tacky) convertToAsm() Function_Asm {
-	fnAsm := Function_Asm{name: fn.name, stackSize: 0}
+func (fn *Function_Definition_Tacky) topLevelToAsm() Top_Level_Asm {
+	fnAsm := Function_Asm{name: fn.name, global: fn.global, stackSize: 0}
 	instructions := []Instruction_Asm{}
 
 	// when we call a function that isn't main, at the beginning of that function
@@ -339,7 +357,13 @@ func (fn *Function_Definition_Tacky) convertToAsm() Function_Asm {
 	}
 
 	fnAsm.instructions = instructions
-	return fnAsm
+	return &fnAsm
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *Static_Variable_Tacky) topLevelToAsm() Top_Level_Asm {
+	return &Static_Variable_Asm{name: st.name, global: st.global, initialValue: st.initialValue}
 }
 
 //###############################################################################
@@ -412,8 +436,7 @@ func (instr *Binary_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 		instructions := []Instruction_Asm{&cmp, &mov, &setC}
 		return instructions
 	} else {
-		fmt.Println("unknown Binary_Instruction_Tacky")
-		os.Exit(1)
+		fail("unknown Binary_Instruction_Tacky")
 	}
 
 	return nil
@@ -556,41 +579,46 @@ func (val *Variable_Value_Tacky) valueToAsm() Operand_Asm {
 //###############################################################################
 
 func (pr *Program_Asm) replacePseudoregisters() {
-	for fnIndex, _ := range pr.functions {
+	for index, _ := range pr.topItems {
 		nameToOffset := make(map[string]int32)
 		// store the stack size for the function
-		pr.functions[fnIndex].replacePseudoregisters(&pr.functions[fnIndex].stackSize, nameToOffset)
+		pr.topItems[index].replacePseudoregisters(nameToOffset)
 	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (fn *Function_Asm) replacePseudoregisters(stackOffset *int32, nameToOffset map[string]int32) {
+func (st *Static_Variable_Asm) replacePseudoregisters(nameToOffset map[string]int32) {
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (fn *Function_Asm) replacePseudoregisters(nameToOffset map[string]int32) {
 	for index, _ := range fn.instructions {
 		switch convertedInstr := fn.instructions[index].(type) {
 		case *Mov_Instruction_Asm:
-			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, stackOffset, nameToOffset)
-			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, stackOffset, nameToOffset)
+			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &fn.stackSize, nameToOffset)
+			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
 		case *Unary_Instruction_Asm:
-			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, stackOffset, nameToOffset)
+			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
 		case *Binary_Instruction_Asm:
-			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, stackOffset, nameToOffset)
-			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, stackOffset, nameToOffset)
+			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &fn.stackSize, nameToOffset)
+			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
 		case *IDivide_Instruction_Asm:
-			convertedInstr.divisor = replaceIfPseudoregister(convertedInstr.divisor, stackOffset, nameToOffset)
+			convertedInstr.divisor = replaceIfPseudoregister(convertedInstr.divisor, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
 		case *Compare_Instruction_Asm:
-			convertedInstr.op1 = replaceIfPseudoregister(convertedInstr.op1, stackOffset, nameToOffset)
-			convertedInstr.op2 = replaceIfPseudoregister(convertedInstr.op2, stackOffset, nameToOffset)
+			convertedInstr.op1 = replaceIfPseudoregister(convertedInstr.op1, &fn.stackSize, nameToOffset)
+			convertedInstr.op2 = replaceIfPseudoregister(convertedInstr.op2, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
 		case *Set_Conditional_Instruction_Asm:
-			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, stackOffset, nameToOffset)
+			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
 		case *Push_Instruction_Asm:
-			convertedInstr.op = replaceIfPseudoregister(convertedInstr.op, stackOffset, nameToOffset)
+			convertedInstr.op = replaceIfPseudoregister(convertedInstr.op, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
 		}
 	}
@@ -613,6 +641,14 @@ func replaceIfPseudoregister(op Operand_Asm, stackOffset *int32, nameToOffset ma
 	if alreadyExists {
 		return &Stack_Operand_Asm{value: existingOffset}
 	} else {
+		sym, inSymTable := symbolTable[convertedOp.name]
+		if inSymTable {
+			_, isStatic := sym.attrs.(*Static_Attributes)
+			if isStatic {
+				return &Data_Operand_Asm{name: convertedOp.name}
+			}
+		}
+
 		*stackOffset = *stackOffset - 4
 		nameToOffset[convertedOp.name] = *stackOffset
 		return &Stack_Operand_Asm{value: *stackOffset}
@@ -624,30 +660,30 @@ func replaceIfPseudoregister(op Operand_Asm, stackOffset *int32, nameToOffset ma
 //###############################################################################
 
 func (pr *Program_Asm) instructionFixup() {
-	for index, _ := range pr.functions {
-		// round up the stack size to the nearest multiple of 16, although we're actually rounding down since it's negative...
-		newStackSize := pr.functions[index].stackSize
-		remainder := newStackSize % 16
-		if remainder != 0 {
-			newStackSize = (newStackSize/16)*16 - 16
-		}
-		pr.functions[index].stackSize = newStackSize
-
-		// insert instruction to allocate space on the stack
-		op := Immediate_Int_Operand_Asm{value: -pr.functions[index].stackSize}
-		firstInstr := Allocate_Stack_Instruction_Asm{stackSize: &op}
-		instructions := []Instruction_Asm{&firstInstr}
-		pr.functions[index].instructions = append(instructions, pr.functions[index].instructions...)
-
-		pr.functions[index].fixInvalidInstr()
+	for index, _ := range pr.topItems {
+		pr.topItems[index].fixInvalidInstr()
 	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (fn *Function_Asm) fixInvalidInstr() {
-	// rewrite invalid instructions, they can't have both operands be Stack operands
-	instructions := []Instruction_Asm{}
+	// round up the stack size to the nearest multiple of 16, although we're actually rounding down since it's negative...
+	newStackSize := fn.stackSize
+	remainder := newStackSize % 16
+	if remainder != 0 {
+		newStackSize = (newStackSize/16)*16 - 16
+	}
+	fn.stackSize = newStackSize
+
+	// insert instruction to allocate space on the stack
+	op := Immediate_Int_Operand_Asm{value: -fn.stackSize}
+	firstInstr := Allocate_Stack_Instruction_Asm{stackSize: &op}
+	instructions := []Instruction_Asm{&firstInstr}
+	fn.instructions = append(instructions, fn.instructions...)
+
+	// rewrite invalid instructions, they can't have both operands be memory addresses
+	instructions = []Instruction_Asm{}
 
 	for _, instr := range fn.instructions {
 
@@ -675,11 +711,18 @@ func (fn *Function_Asm) fixInvalidInstr() {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (st *Static_Variable_Asm) fixInvalidInstr() {
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (instr *Mov_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 	_, srcIsStack := instr.src.(*Stack_Operand_Asm)
 	_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
+	_, srcIsStatic := instr.src.(*Data_Operand_Asm)
+	_, dstIsStatic := instr.dst.(*Data_Operand_Asm)
 
-	if srcIsStack && dstIsStack {
+	if (srcIsStack || srcIsStatic) && (dstIsStack || dstIsStatic) {
 		intermediateOperand := Register_Operand_Asm{R10_REGISTER_ASM}
 		firstInstr := Mov_Instruction_Asm{src: instr.src, dst: &intermediateOperand}
 		secondInstr := Mov_Instruction_Asm{src: &intermediateOperand, dst: instr.dst}
@@ -695,8 +738,10 @@ func (instr *Binary_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 	if instr.binOp == ADD_OPERATOR_ASM || instr.binOp == SUB_OPERATOR_ASM {
 		_, srcIsStack := instr.src.(*Stack_Operand_Asm)
 		_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
+		_, srcIsStatic := instr.src.(*Data_Operand_Asm)
+		_, dstIsStatic := instr.dst.(*Data_Operand_Asm)
 
-		if srcIsStack && dstIsStack {
+		if (srcIsStack || srcIsStatic) && (dstIsStack || dstIsStatic) {
 			intermediateOperand := Register_Operand_Asm{R10_REGISTER_ASM}
 			firstInstr := Mov_Instruction_Asm{src: instr.src, dst: &intermediateOperand}
 			secondInstr := Binary_Instruction_Asm{binOp: instr.binOp, src: &intermediateOperand, dst: instr.dst}
@@ -704,8 +749,9 @@ func (instr *Binary_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 		}
 	} else if instr.binOp == MULT_OPERATOR_ASM {
 		_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
+		_, dstIsStatic := instr.dst.(*Data_Operand_Asm)
 
-		if dstIsStack {
+		if dstIsStack || dstIsStatic {
 			firstInstr := Mov_Instruction_Asm{src: instr.dst, dst: &Register_Operand_Asm{R11_REGISTER_ASM}}
 			secondInstr := Binary_Instruction_Asm{binOp: instr.binOp, src: instr.src, dst: &Register_Operand_Asm{R11_REGISTER_ASM}}
 			thirdInstr := Mov_Instruction_Asm{src: &Register_Operand_Asm{R11_REGISTER_ASM}, dst: instr.dst}
@@ -735,9 +781,11 @@ func (instr *IDivide_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 func (instr *Compare_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 	_, op1IsStack := instr.op1.(*Stack_Operand_Asm)
 	_, op2IsStack := instr.op2.(*Stack_Operand_Asm)
+	_, op1IsStatic := instr.op1.(*Data_Operand_Asm)
+	_, op2IsStatic := instr.op2.(*Data_Operand_Asm)
 	_, op2IsConstant := instr.op2.(*Immediate_Int_Operand_Asm)
 
-	if op1IsStack && op2IsStack {
+	if (op1IsStack || op1IsStatic) && (op2IsStack || op2IsStatic) {
 		intermediateOperand := Register_Operand_Asm{R10_REGISTER_ASM}
 		firstInstr := Mov_Instruction_Asm{src: instr.op1, dst: &intermediateOperand}
 		secondInstr := Compare_Instruction_Asm{op1: &intermediateOperand, op2: instr.op2}
