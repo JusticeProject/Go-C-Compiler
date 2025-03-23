@@ -33,17 +33,32 @@ func makeLabelName(name string) string {
 //###############################################################################
 
 type Program_Tacky struct {
-	functions []Function_Definition_Tacky
+	topItems []Top_Level_Tacky
 }
 
 //###############################################################################
 //###############################################################################
 //###############################################################################
 
+type Top_Level_Tacky interface {
+	topLevelToAsm()
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 type Function_Definition_Tacky struct {
 	name   string
+	global bool
 	params []string
 	body   []Instruction_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Static_Variable_Tacky struct {
+	name         string
+	global       bool
+	initialValue int32
 }
 
 //###############################################################################
@@ -128,6 +143,7 @@ type Value_Tacky interface {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+// TODO: could switch this to using enums for the data type and a string to hold the actual value
 type Constant_Value_Tacky struct {
 	value int32
 }
@@ -150,19 +166,30 @@ func doTackyGen(ast Program) Program_Tacky {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (pr *Program) genTacky() Program_Tacky {
-	tacFuncs := []Function_Definition_Tacky{}
+	topItems := []Top_Level_Tacky{}
 
-	for _, fn := range pr.functions {
-		instrs := fn.declToTacky()
+	for _, decl := range pr.decls {
+		fnDecl, isFunc := decl.(*Function_Declaration)
+		if !isFunc {
+			// we won't deal with file scope variable declarations now, we'll do that later
+			continue
+		}
+
+		instrs := fnDecl.declToTacky()
 		if len(instrs) > 0 {
 			// function definitions will have at least one instruction, function declarations won't have any instructions,
 			// we will only keep the function definitions
-			tacFunc := Function_Definition_Tacky{name: fn.name, params: fn.params, body: instrs}
-			tacFuncs = append(tacFuncs, tacFunc)
+			global := symbolTable[fnDecl.name].attrs.isGlobalAttribute()
+			tacFunc := Function_Definition_Tacky{name: fnDecl.name, global: global, params: fnDecl.params, body: instrs}
+			topItems = append(topItems, &tacFunc)
 		}
 	}
 
-	tacky := Program_Tacky{functions: tacFuncs}
+	// add the top level items that are in the symbol table
+	moreItems := convertSymbolsToTacky()
+	topItems = append(topItems, moreItems...)
+
+	tacky := Program_Tacky{topItems: topItems}
 	return tacky
 }
 
@@ -170,9 +197,39 @@ func (pr *Program) genTacky() Program_Tacky {
 //###############################################################################
 //###############################################################################
 
+func convertSymbolsToTacky() []Top_Level_Tacky {
+	topItems := []Top_Level_Tacky{}
+
+	for name, sym := range symbolTable {
+		switch convertedAttr := sym.attrs.(type) {
+		case *Static_Attributes:
+			switch convertedInit := convertedAttr.init.(type) {
+			case *Initial_Int:
+				v := Static_Variable_Tacky{name: name, global: convertedAttr.global, initialValue: convertedInit.value}
+				topItems = append(topItems, &v)
+			case *Tentative:
+				v := Static_Variable_Tacky{name: name, global: convertedAttr.global, initialValue: 0}
+				topItems = append(topItems, &v)
+			default:
+				continue
+			}
+		default:
+			continue
+		}
+	}
+
+	return topItems
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (d *Variable_Declaration) declToTacky() []Instruction_Tacky {
 	if d.initializer == nil {
 		// no instructions needed
+		return []Instruction_Tacky{}
+	} else if (d.storageClass == STATIC_STORAGE_CLASS) || (d.storageClass == EXTERN_STORAGE_CLASS) {
+		// don't emit tacky for local variable declarations with static or extern specifiers,
+		// we handle that at the top level
 		return []Instruction_Tacky{}
 	} else {
 		// get the instructions for the initializer

@@ -1,10 +1,5 @@
 package main
 
-import (
-	"fmt"
-	"os"
-)
-
 //###############################################################################
 //###############################################################################
 //###############################################################################
@@ -73,15 +68,13 @@ func labelStatement(st Statement, currentLabel string) Statement {
 		return convertedSt
 	case *Break_Statement:
 		if currentLabel == "" {
-			fmt.Println("Semantic error: break statement outside of loop.")
-			os.Exit(1)
+			fail("Semantic error: break statement outside of loop.")
 		}
 		convertedSt.label = currentLabel
 		return convertedSt
 	case *Continue_Statement:
 		if currentLabel == "" {
-			fmt.Println("Semantic error: continue statement outside of loop.")
-			os.Exit(1)
+			fail("Semantic error: continue statement outside of loop.")
 		}
 		convertedSt.label = currentLabel
 		return convertedSt
