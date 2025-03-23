@@ -82,7 +82,7 @@ func resolveFunctionDeclaration(decl Function_Declaration, identifierMap map[str
 		tempBody := resolveBlock(*decl.body, innerMap)
 		newBody = &tempBody
 	}
-	return Function_Declaration{name: decl.name, params: newParams, body: newBody}
+	return Function_Declaration{name: decl.name, params: newParams, body: newBody, storageClass: decl.storageClass}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
