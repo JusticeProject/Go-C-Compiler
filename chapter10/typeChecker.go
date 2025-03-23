@@ -16,6 +16,8 @@ func (t *Int_Type) isEqual(input Data_Type) bool {
 	return isIntType
 }
 
+// TODO: could maybe switch these to enums in a Data_Type struct with paramCount
+
 /////////////////////////////////////////////////////////////////////////////////
 
 type Function_Type struct {
@@ -51,6 +53,8 @@ func (t *Tentative) isTentative() bool     { return true }
 type Initial_Int struct {
 	value int32
 }
+
+// TODO: could maybe switch these to enums
 
 func (i *Initial_Int) isConstantValue() bool { return true }
 func (i *Initial_Int) isTentative() bool     { return false }

@@ -41,7 +41,7 @@ type Program_Tacky struct {
 //###############################################################################
 
 type Top_Level_Tacky interface {
-	topLevelToAsm()
+	topLevelToAsm() Top_Level_Asm
 }
 
 /////////////////////////////////////////////////////////////////////////////////

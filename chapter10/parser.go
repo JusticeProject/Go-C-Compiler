@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 )
 
@@ -170,6 +169,9 @@ type Expression interface {
 	getPrettyPrintLines() []string
 }
 
+// TODO: could maybe switch the Constant_Int_Expression to Constant_Value_Expression and use an enum
+// for the data type, a string could hold the value, use strings.ParseInt() to convert to int
+
 type Constant_Int_Expression struct {
 	intValue int32
 }
@@ -311,9 +313,7 @@ func doParser(tokens []Token) Program {
 
 	// if there are any remaining tokens, generate syntax error
 	if len(tokens) > 0 {
-		fmt.Println("Sytnax Error. Tokens remaining after parsing program:")
-		fmt.Println(tokens)
-		os.Exit(1)
+		fail("Sytnax Error. Tokens remaining after parsing program.")
 	}
 
 	// print the ast in a well-formatted way
@@ -430,12 +430,10 @@ func analyzeTypeAndStorageClass(specifiers []Token) (Data_Type, StorageClassEnum
 	}
 
 	if len(types) != 1 {
-		fmt.Println("Invalid type specifier")
-		os.Exit(1)
+		fail("Invalid type specifier")
 	}
 	if len(storageClasses) > 1 {
-		fmt.Println("Invalid storage class")
-		os.Exit(1)
+		fail("Invalid storage class")
 	}
 
 	if len(storageClasses) == 1 {
@@ -540,8 +538,7 @@ func parseForInitial(tokens []Token) (For_Initial_Clause, []Token) {
 		if ok {
 			return &For_Initial_Declaration{decl: *varDecl}, tokens
 		} else {
-			fmt.Println("Expected Variable Declaration at beginning of for loop")
-			os.Exit(1)
+			fail("Expected Variable Declaration at beginning of for loop")
 		}
 	} else {
 		// must be an (optional) expression
@@ -704,8 +701,7 @@ func getPrecedence(token Token) int {
 	case EQUAL_TOKEN:
 		return 1
 	default:
-		fmt.Println("unknown token type:", token.tokenType)
-		os.Exit(1)
+		fail("unknown token type")
 	}
 
 	return 0
@@ -745,9 +741,7 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
 		return innerExp, tokens
 	} else {
-		fmt.Println("Malformed expression.")
-		fmt.Println("Unexpected", allRegexp[nextToken.tokenType])
-		os.Exit(1)
+		fail("Malformed expression. Unexpected", allRegexp[nextToken.tokenType].String())
 	}
 
 	// should never reach here, but go compiler complains if there's no return statement
@@ -794,10 +788,7 @@ func expect(expected TokenEnum, tokens []Token) (Token, []Token) {
 
 	if actual.tokenType != expected {
 		// TODO: make this error msg more human readable, need function to convert TokenEnum to string
-		fmt.Println("Syntax error.")
-		fmt.Println("Expected", allRegexp[expected])
-		fmt.Println("but found", allRegexp[actual.tokenType])
-		os.Exit(1)
+		fail("Syntax error. Expected", allRegexp[expected].String(), "but found", allRegexp[actual.tokenType].String())
 	}
 
 	return actual, tokens

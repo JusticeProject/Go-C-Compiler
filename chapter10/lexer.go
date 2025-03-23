@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"regexp"
 	"strings"
 )
@@ -174,8 +172,7 @@ func doLexer(fileContents string) []Token {
 	// if there is still data in fileContents then we have data that didn't match a regexp, so generate error
 	finalContents := strings.TrimLeft(fileContents, " \n\r\t")
 	if len(finalContents) > 0 {
-		fmt.Println("some data could not be tokenized:", finalContents)
-		os.Exit(1)
+		fail("some data could not be tokenized:", finalContents)
 	}
 
 	return allTokens
