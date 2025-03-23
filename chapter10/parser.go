@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 )
 
 //###############################################################################
@@ -55,6 +54,40 @@ func getStorageClass(token Token) StorageClassEnum {
 	default:
 		return NONE_STORAGE_CLASS
 	}
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+type Data_Type interface {
+	isEqual(input Data_Type) bool
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Int_Type struct {
+}
+
+func (t *Int_Type) isEqual(input Data_Type) bool {
+	_, isIntType := input.(*Int_Type)
+	return isIntType
+}
+
+// TODO: could maybe switch these to enums in a Data_Type struct with paramCount
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Function_Type struct {
+	paramCount int
+}
+
+func (t *Function_Type) isEqual(input Data_Type) bool {
+	converted, isFuncType := input.(*Function_Type)
+	if isFuncType {
+		return (t.paramCount == converted.paramCount)
+	}
+	return false
 }
 
 //###############################################################################
@@ -173,7 +206,7 @@ type Expression interface {
 // for the data type, a string could hold the value, use strings.ParseInt() to convert to int
 
 type Constant_Int_Expression struct {
-	intValue int32
+	intValue string
 }
 
 type Variable_Expression struct {
@@ -774,11 +807,11 @@ func parseIdentifier(tokens []Token) (string, []Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseInteger(tokens []Token) (int32, []Token) {
+func parseInteger(tokens []Token) (string, []Token) {
 	currentToken, tokens := expect(INT_CONSTANT_TOKEN, tokens)
 	// TODO: what about 8, 16, 64-bit integers?
-	integer, _ := strconv.ParseInt(currentToken.word, 10, 64)
-	return int32(integer), tokens
+	//integer, _ := strconv.ParseInt(currentToken.word, 10, 64)
+	return currentToken.word, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////

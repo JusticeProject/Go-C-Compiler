@@ -56,7 +56,7 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 		file.WriteString("\t" + ".globl " + st.name + "\n")
 	}
 
-	if st.initialValue == 0 {
+	if st.initialValue == "0" {
 		file.WriteString("\t" + ".bss" + "\n")
 		file.WriteString("\t" + ".align 4" + "\n")
 		file.WriteString(st.name + ":\n")
@@ -65,7 +65,7 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 		file.WriteString("\t" + ".data" + "\n")
 		file.WriteString("\t" + ".align 4" + "\n")
 		file.WriteString(st.name + ":\n")
-		file.WriteString("\t" + ".long " + strconv.FormatInt(int64(st.initialValue), 10) + "\n")
+		file.WriteString("\t" + ".long " + st.initialValue + "\n")
 	}
 }
 
@@ -155,7 +155,7 @@ func (instr *Push_Instruction_Asm) instrEmitAsm(file *os.File) {
 func (instr *Call_Function_Asm) instrEmitAsm(file *os.File) {
 	// need to find if the function we are calling is in the current binary object file or somewhere else
 	entry, inTable := symbolTable[instr.name]
-	if inTable && entry.attrs.(*Function_Attributes).defined {
+	if inTable && entry.defined {
 		// It must be in the table and have a definition to use this calling method. If it's in the table
 		// but not defined then it's just a function declaration so the definition is elsewhere.
 		file.WriteString("\t" + "call" + "\t" + instr.name + "\n")
@@ -184,8 +184,7 @@ func getUnaryOperatorString(unOp UnaryOperatorTypeAsm) string {
 	case NOT_OPERATOR_ASM:
 		return "notl"
 	default:
-		fmt.Println("unknown unary operator:", unOp)
-		os.Exit(1)
+		fail("unknown unary operator")
 	}
 
 	return ""
@@ -204,8 +203,7 @@ func getBinaryOperatorString(binOp BinaryOperatorTypeAsm) string {
 	case MULT_OPERATOR_ASM:
 		return "imull"
 	default:
-		fmt.Println("unknown binary operator:", binOp)
-		os.Exit(1)
+		fail("unknown binary operator")
 	}
 
 	return ""
@@ -216,7 +214,7 @@ func getBinaryOperatorString(binOp BinaryOperatorTypeAsm) string {
 //###############################################################################
 
 func (op *Immediate_Int_Operand_Asm) getOperandString(sizeBytes int) string {
-	return "$" + strconv.FormatInt(int64(op.value), 10)
+	return "$" + op.value
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -228,8 +226,7 @@ func (op *Register_Operand_Asm) getOperandString(sizeBytes int) string {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (op *Pseudoregister_Operand_Asm) getOperandString(sizeBytes int) string {
-	fmt.Println("cannot emit pseudoregister")
-	os.Exit(1)
+	fail("cannot emit pseudoregister")
 	return ""
 }
 
@@ -264,8 +261,7 @@ func getConditionalCodeString(code ConditionalCodeAsm) string {
 	case GREATER_OR_EQUAL_CODE_ASM:
 		return "ge"
 	default:
-		fmt.Println("unknown conditional code:", code)
-		os.Exit(1)
+		fail("unknown conditional code")
 	}
 
 	return ""
@@ -296,8 +292,7 @@ func getRegisterString(reg RegisterTypeAsm, sizeBytes int) string {
 	case R11_REGISTER_ASM:
 		return "r11" + getScratchRegisterSuffix(sizeBytes)
 	default:
-		fmt.Println("unknown register:", reg)
-		os.Exit(1)
+		fail("unknown register")
 	}
 
 	return ""

@@ -58,7 +58,7 @@ type Function_Definition_Tacky struct {
 type Static_Variable_Tacky struct {
 	name         string
 	global       bool
-	initialValue int32
+	initialValue string
 }
 
 //###############################################################################
@@ -145,7 +145,7 @@ type Value_Tacky interface {
 
 // TODO: could switch this to using enums for the data type and a string to hold the actual value
 type Constant_Value_Tacky struct {
-	value int32
+	value string
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -179,7 +179,7 @@ func (pr *Program) genTacky() Program_Tacky {
 		if len(instrs) > 0 {
 			// function definitions will have at least one instruction, function declarations won't have any instructions,
 			// we will only keep the function definitions
-			global := symbolTable[fnDecl.name].attrs.isGlobalAttribute()
+			global := symbolTable[fnDecl.name].global
 			tacFunc := Function_Definition_Tacky{name: fnDecl.name, global: global, params: fnDecl.params, body: instrs}
 			topItems = append(topItems, &tacFunc)
 		}
@@ -201,14 +201,14 @@ func convertSymbolsToTacky() []Top_Level_Tacky {
 	topItems := []Top_Level_Tacky{}
 
 	for name, sym := range symbolTable {
-		switch convertedAttr := sym.attrs.(type) {
-		case *Static_Attributes:
-			switch convertedInit := convertedAttr.init.(type) {
-			case *Initial_Int:
-				v := Static_Variable_Tacky{name: name, global: convertedAttr.global, initialValue: convertedInit.value}
+		switch sym.attrs {
+		case STATIC_ATTRIBUTES:
+			switch sym.initializer {
+			case INITIAL_INT:
+				v := Static_Variable_Tacky{name: name, global: sym.global, initialValue: sym.initialValue}
 				topItems = append(topItems, &v)
-			case *Tentative:
-				v := Static_Variable_Tacky{name: name, global: convertedAttr.global, initialValue: 0}
+			case TENTATIVE_INIT:
+				v := Static_Variable_Tacky{name: name, global: sym.global, initialValue: "0"}
 				topItems = append(topItems, &v)
 			default:
 				continue
@@ -256,7 +256,7 @@ func (fn *Function_Declaration) declToTacky() []Instruction_Tacky {
 
 	// Add a return statement to the end of every function just in case the original source didn't have one.
 	// If it already had a return statement then no big deal becuase this new ret instruction will never run.
-	ret := Return_Instruction_Tacky{&Constant_Value_Tacky{0}}
+	ret := Return_Instruction_Tacky{&Constant_Value_Tacky{"0"}}
 	bodyTac = append(bodyTac, &ret)
 
 	return bodyTac
@@ -516,14 +516,14 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		j2 := Jump_If_Zero_Instruction_Tacky{condition: v2, target: false_label}
 		instructions = append(instructions, &j2)
 		result := Variable_Value_Tacky{makeTempVarName("")}
-		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{1}, dst: &result}
+		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{"1"}, dst: &result}
 		instructions = append(instructions, &cp1)
 		end := makeLabelName("end")
 		j3 := Jump_Instruction_Tacky{end}
 		instructions = append(instructions, &j3)
 		lb1 := Label_Instruction_Tacky{false_label}
 		instructions = append(instructions, &lb1)
-		cp2 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{0}, dst: &result}
+		cp2 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{"0"}, dst: &result}
 		instructions = append(instructions, &cp2)
 		lb2 := Label_Instruction_Tacky{end}
 		instructions = append(instructions, &lb2)
@@ -537,14 +537,14 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		j2 := Jump_If_Not_Zero_Instruction_Tacky{condition: v2, target: true_label}
 		instructions = append(instructions, &j2)
 		result := Variable_Value_Tacky{makeTempVarName("")}
-		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{0}, dst: &result}
+		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{"0"}, dst: &result}
 		instructions = append(instructions, &cp1)
 		end := makeLabelName("end")
 		j3 := Jump_Instruction_Tacky{end}
 		instructions = append(instructions, &j3)
 		lb1 := Label_Instruction_Tacky{true_label}
 		instructions = append(instructions, &lb1)
-		cp2 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{1}, dst: &result}
+		cp2 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{"1"}, dst: &result}
 		instructions = append(instructions, &cp2)
 		lb2 := Label_Instruction_Tacky{end}
 		instructions = append(instructions, &lb2)

@@ -1,10 +1,5 @@
 package main
 
-import (
-	"fmt"
-	"os"
-)
-
 /////////////////////////////////////////////////////////////////////////////////
 
 type Identifier_Info struct {
@@ -62,8 +57,7 @@ func resolveFunctionDeclaration(decl Function_Declaration, identifierMap map[str
 	prevEntry, funcExists := identifierMap[decl.name]
 	if funcExists {
 		if prevEntry.fromCurrentScope && !prevEntry.hasLinkage {
-			fmt.Println("Semantic error. Duplicate function declaration:", decl.name)
-			os.Exit(1)
+			fail("Semantic error. Duplicate function declaration:", decl.name)
 		}
 	}
 
@@ -91,8 +85,7 @@ func resolveParam(param string, identifierMap map[string]Identifier_Info) string
 	idInfo, nameExists := identifierMap[param]
 
 	if nameExists && idInfo.fromCurrentScope {
-		fmt.Println("Semantic error. Variable", param, "declared more than once in same scope.")
-		os.Exit(1)
+		fail("Semantic error. Variable", param, "declared more than once in same scope.")
 	}
 
 	uniqueName := makeTempVarName(param)
@@ -115,8 +108,7 @@ func resolveLocalVariableDeclaration(decl Variable_Declaration, identifierMap ma
 
 	if nameExists && prevEntry.fromCurrentScope {
 		if (!prevEntry.hasLinkage) || (decl.storageClass != EXTERN_STORAGE_CLASS) {
-			fmt.Println("Semantic error. Conflicting local declarations of variable", decl.name)
-			os.Exit(1)
+			fail("Semantic error. Conflicting local declarations of variable", decl.name)
 		}
 	}
 
@@ -164,19 +156,16 @@ func resolveBlockItem(existingItem Block_Item, identifierMap map[string]Identifi
 		} else {
 			funcDecl := convertedItem.decl.(*Function_Declaration)
 			if funcDecl.body != nil {
-				fmt.Println("Semantic error. Local function declaration can not have a body:", funcDecl.name)
-				os.Exit(1)
+				fail("Semantic error. Local function declaration can not have a body:", funcDecl.name)
 			}
 			if funcDecl.storageClass == STATIC_STORAGE_CLASS {
-				fmt.Println("Semantic error. Block scope function declaration can not be static:", funcDecl.name)
-				os.Exit(1)
+				fail("Semantic error. Block scope function declaration can not be static:", funcDecl.name)
 			}
 			newDecl := resolveFunctionDeclaration(*funcDecl, identifierMap)
 			return &Block_Declaration{&newDecl}
 		}
 	default:
-		fmt.Println("unknown Block_Item when resolving variables")
-		os.Exit(1)
+		fail("unknown Block_Item when resolving variables")
 	}
 
 	return nil
@@ -194,8 +183,7 @@ func resolveForInit(fi For_Initial_Clause, identifierMap map[string]Identifier_I
 		newExp := resolveExpression(convertedInit.exp, identifierMap)
 		return &For_Initial_Expression{exp: newExp}
 	default:
-		fmt.Println("unknown For_Initial_Clause when resolving variables.")
-		os.Exit(1)
+		fail("unknown For_Initial_Clause when resolving variables.")
 	}
 
 	return nil
@@ -246,8 +234,7 @@ func resolveStatement(st Statement, identifierMap map[string]Identifier_Info) St
 	case *Null_Statement:
 		return st
 	default:
-		fmt.Println("unknown Statement type when resolving variables")
-		os.Exit(1)
+		fail("unknown Statement type when resolving variables")
 	}
 
 	return nil
@@ -268,8 +255,7 @@ func resolveExpression(exp Expression, identifierMap map[string]Identifier_Info)
 		if varExists {
 			return &Variable_Expression{idInfo.uniqueName}
 		} else {
-			fmt.Println("Semantic error. Undeclared variable:", convertedExp.name)
-			os.Exit(1)
+			fail("Semantic error. Undeclared variable:", convertedExp.name)
 		}
 	case *Unary_Expression:
 		newInner := resolveExpression(convertedExp.innerExp, identifierMap)
@@ -281,8 +267,7 @@ func resolveExpression(exp Expression, identifierMap map[string]Identifier_Info)
 	case *Assignment_Expression:
 		_, isValidLvalue := convertedExp.lvalue.(*Variable_Expression)
 		if !isValidLvalue {
-			fmt.Println("Semantic error. Invalid lvalue on left side of assignment.")
-			os.Exit(1)
+			fail("Semantic error. Invalid lvalue on left side of assignment.")
 		}
 		newLvalue := resolveExpression(convertedExp.lvalue, identifierMap)
 		newRightExp := resolveExpression(convertedExp.rightExp, identifierMap)
@@ -303,12 +288,10 @@ func resolveExpression(exp Expression, identifierMap map[string]Identifier_Info)
 			}
 			return &Function_Call_Expression{functionName: newFuncName, args: newArgs}
 		} else {
-			fmt.Println("Semantic error. Trying to use undeclared function:", convertedExp.functionName)
-			os.Exit(1)
+			fail("Semantic error. Trying to use undeclared function:", convertedExp.functionName)
 		}
 	default:
-		fmt.Println("unknown Expression type when resolving variables")
-		os.Exit(1)
+		fail("unknown Expression type when resolving variables")
 	}
 
 	return nil

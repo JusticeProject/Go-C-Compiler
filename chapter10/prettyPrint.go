@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 )
 
@@ -343,7 +341,7 @@ func (s *Null_Statement) getPrettyPrintLines() []string {
 //###############################################################################
 
 func (e *Constant_Int_Expression) getPrettyPrintLines() []string {
-	line := "CONSTANT_INT_EXPRESSION" + "(" + strconv.FormatInt(int64(e.intValue), 10) + ")"
+	line := "CONSTANT_INT_EXPRESSION" + "(" + e.intValue + ")"
 	return []string{line}
 }
 
@@ -443,8 +441,7 @@ func getPrettyPrintUnary(typ UnaryOperatorType) string {
 	case NOT_OPERATOR:
 		return "NOT"
 	default:
-		fmt.Println("unknown Unary operator:", typ)
-		os.Exit(1)
+		fail("unknown Unary operator")
 	}
 
 	return ""
@@ -481,8 +478,7 @@ func getPrettyPrintBinary(typ BinaryOperatorType) string {
 	case GREATER_OR_EQUAL_OPERATOR:
 		return "GREATER_OR_EQUAL"
 	default:
-		fmt.Println("Unknown binary operator:", typ)
-		os.Exit(1)
+		fail("Unknown binary operator")
 	}
 
 	return ""

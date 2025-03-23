@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strconv"
 )
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -45,7 +46,7 @@ type Function_Asm struct {
 type Static_Variable_Asm struct {
 	name         string
 	global       bool
-	initialValue int32
+	initialValue string
 }
 
 //###############################################################################
@@ -216,7 +217,7 @@ type Operand_Asm interface {
 /////////////////////////////////////////////////////////////////////////////////
 
 type Immediate_Int_Operand_Asm struct {
-	value int32
+	value string
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -384,8 +385,8 @@ func (instr *Return_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 
 func (instr *Unary_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 	if instr.unOp == NOT_OPERATOR {
-		cmp := Compare_Instruction_Asm{op1: &Immediate_Int_Operand_Asm{0}, op2: instr.src.valueToAsm()}
-		mov := Mov_Instruction_Asm{src: &Immediate_Int_Operand_Asm{0}, dst: instr.dst.valueToAsm()}
+		cmp := Compare_Instruction_Asm{op1: &Immediate_Int_Operand_Asm{"0"}, op2: instr.src.valueToAsm()}
+		mov := Mov_Instruction_Asm{src: &Immediate_Int_Operand_Asm{"0"}, dst: instr.dst.valueToAsm()}
 		setC := Set_Conditional_Instruction_Asm{code: IS_EQUAL_CODE_ASM, dst: instr.dst.valueToAsm()}
 
 		instructions := []Instruction_Asm{&cmp, &mov, &setC}
@@ -431,7 +432,7 @@ func (instr *Binary_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 	} else if instr.binOp == IS_EQUAL_OPERATOR || instr.binOp == NOT_EQUAL_OPERATOR || instr.binOp == LESS_THAN_OPERATOR ||
 		instr.binOp == LESS_OR_EQUAL_OPERATOR || instr.binOp == GREATER_THAN_OPERATOR || instr.binOp == GREATER_OR_EQUAL_OPERATOR {
 		cmp := Compare_Instruction_Asm{op1: instr.src2.valueToAsm(), op2: instr.src1.valueToAsm()}
-		mov := Mov_Instruction_Asm{src: &Immediate_Int_Operand_Asm{0}, dst: instr.dst.valueToAsm()}
+		mov := Mov_Instruction_Asm{src: &Immediate_Int_Operand_Asm{"0"}, dst: instr.dst.valueToAsm()}
 		setC := Set_Conditional_Instruction_Asm{code: convertBinaryOpToCondition(instr.binOp), dst: instr.dst.valueToAsm()}
 		instructions := []Instruction_Asm{&cmp, &mov, &setC}
 		return instructions
@@ -459,7 +460,7 @@ func (instr *Jump_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Jump_If_Zero_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
-	cmp := Compare_Instruction_Asm{op1: &Immediate_Int_Operand_Asm{0}, op2: instr.condition.valueToAsm()}
+	cmp := Compare_Instruction_Asm{op1: &Immediate_Int_Operand_Asm{"0"}, op2: instr.condition.valueToAsm()}
 	jmpC := Jump_Conditional_Instruction_Asm{code: IS_EQUAL_CODE_ASM, target: instr.target}
 	return []Instruction_Asm{&cmp, &jmpC}
 }
@@ -467,7 +468,7 @@ func (instr *Jump_If_Zero_Instruction_Tacky) instructionToAsm() []Instruction_As
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Jump_If_Not_Zero_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
-	cmp := Compare_Instruction_Asm{op1: &Immediate_Int_Operand_Asm{0}, op2: instr.condition.valueToAsm()}
+	cmp := Compare_Instruction_Asm{op1: &Immediate_Int_Operand_Asm{"0"}, op2: instr.condition.valueToAsm()}
 	jmpC := Jump_Conditional_Instruction_Asm{code: NOT_EQUAL_CODE_ASM, target: instr.target}
 	return []Instruction_Asm{&cmp, &jmpC}
 }
@@ -501,7 +502,8 @@ func (instr *Function_Call_Tacky) instructionToAsm() []Instruction_Asm {
 	}
 
 	if stackPadding != 0 {
-		alloc := Allocate_Stack_Instruction_Asm{&Immediate_Int_Operand_Asm{stackPadding}}
+		strPadding := strconv.FormatInt(int64(stackPadding), 10)
+		alloc := Allocate_Stack_Instruction_Asm{&Immediate_Int_Operand_Asm{strPadding}}
 		instructions = append(instructions, &alloc)
 	}
 
@@ -535,7 +537,8 @@ func (instr *Function_Call_Tacky) instructionToAsm() []Instruction_Asm {
 	// adjust the stack pointer when we return from the function we just called
 	bytesToRemove := int32(8*len(stackArgs)) + stackPadding
 	if bytesToRemove != 0 {
-		dealloc := Deallocate_Stack_Instruction_Asm{&Immediate_Int_Operand_Asm{bytesToRemove}}
+		strBytes := strconv.FormatInt(int64(bytesToRemove), 10)
+		dealloc := Deallocate_Stack_Instruction_Asm{&Immediate_Int_Operand_Asm{strBytes}}
 		instructions = append(instructions, &dealloc)
 	}
 
@@ -642,11 +645,8 @@ func replaceIfPseudoregister(op Operand_Asm, stackOffset *int32, nameToOffset ma
 		return &Stack_Operand_Asm{value: existingOffset}
 	} else {
 		sym, inSymTable := symbolTable[convertedOp.name]
-		if inSymTable {
-			_, isStatic := sym.attrs.(*Static_Attributes)
-			if isStatic {
-				return &Data_Operand_Asm{name: convertedOp.name}
-			}
+		if inSymTable && sym.attrs == STATIC_ATTRIBUTES {
+			return &Data_Operand_Asm{name: convertedOp.name}
 		}
 
 		*stackOffset = *stackOffset - 4
@@ -677,7 +677,8 @@ func (fn *Function_Asm) fixInvalidInstr() {
 	fn.stackSize = newStackSize
 
 	// insert instruction to allocate space on the stack
-	op := Immediate_Int_Operand_Asm{value: -fn.stackSize}
+	strStack := strconv.FormatInt(int64(-fn.stackSize), 10)
+	op := Immediate_Int_Operand_Asm{value: strStack}
 	firstInstr := Allocate_Stack_Instruction_Asm{stackSize: &op}
 	instructions := []Instruction_Asm{&firstInstr}
 	fn.instructions = append(instructions, fn.instructions...)

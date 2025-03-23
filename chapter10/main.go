@@ -93,8 +93,7 @@ func doLinux() {
 					index++
 				}
 			default:
-				fmt.Println("unknown option, exiting")
-				os.Exit(1)
+				fail("unknown option, exiting")
 			}
 		}
 	}

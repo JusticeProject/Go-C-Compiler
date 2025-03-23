@@ -2,117 +2,35 @@ package main
 
 /////////////////////////////////////////////////////////////////////////////////
 
-type Data_Type interface {
-	isEqual(input Data_Type) bool
-}
+type InitializerEnum int
+
+const (
+	NO_INITIALIZER InitializerEnum = iota
+	INITIAL_INT
+	TENTATIVE_INIT
+)
 
 /////////////////////////////////////////////////////////////////////////////////
 
-type Int_Type struct {
-}
+type AttributeEnum int
 
-func (t *Int_Type) isEqual(input Data_Type) bool {
-	_, isIntType := input.(*Int_Type)
-	return isIntType
-}
-
-// TODO: could maybe switch these to enums in a Data_Type struct with paramCount
-
-/////////////////////////////////////////////////////////////////////////////////
-
-type Function_Type struct {
-	paramCount int
-}
-
-func (t *Function_Type) isEqual(input Data_Type) bool {
-	converted, isFuncType := input.(*Function_Type)
-	if isFuncType {
-		return (t.paramCount == converted.paramCount)
-	}
-	return false
-}
-
-//###############################################################################
-//###############################################################################
-//###############################################################################
-
-type Initial_Value interface {
-	isConstantValue() bool
-	isTentative() bool
-}
+const (
+	NONE_ATTRIBUTES AttributeEnum = iota
+	FUNCTION_ATTRIBUTES
+	STATIC_ATTRIBUTES
+	LOCAL_ATTRIBUTES
+)
 
 /////////////////////////////////////////////////////////////////////////////////
-
-type Tentative struct{}
-
-func (t *Tentative) isConstantValue() bool { return false }
-func (t *Tentative) isTentative() bool     { return true }
-
-/////////////////////////////////////////////////////////////////////////////////
-
-type Initial_Int struct {
-	value int32
-}
-
-// TODO: could maybe switch these to enums
-
-func (i *Initial_Int) isConstantValue() bool { return true }
-func (i *Initial_Int) isTentative() bool     { return false }
-
-/////////////////////////////////////////////////////////////////////////////////
-
-type No_Initializer struct{}
-
-func (n *No_Initializer) isConstantValue() bool { return false }
-func (n *No_Initializer) isTentative() bool     { return false }
-
-//###############################################################################
-//###############################################################################
-//###############################################################################
-
-type Identifier_Attributes interface {
-	isGlobalAttribute() bool
-	isConstant() bool
-	isTentative() bool
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-
-type Function_Attributes struct {
-	defined bool
-	global  bool
-}
-
-func (f *Function_Attributes) isGlobalAttribute() bool { return f.global }
-func (f *Function_Attributes) isConstant() bool        { return false }
-func (f *Function_Attributes) isTentative() bool       { return false }
-
-/////////////////////////////////////////////////////////////////////////////////
-
-type Static_Attributes struct {
-	init   Initial_Value
-	global bool
-}
-
-func (s *Static_Attributes) isGlobalAttribute() bool { return s.global }
-func (s *Static_Attributes) isConstant() bool        { return s.init.isConstantValue() }
-func (s *Static_Attributes) isTentative() bool       { return s.init.isTentative() }
-
-/////////////////////////////////////////////////////////////////////////////////
-
-type Local_Attributes struct{}
-
-func (l *Local_Attributes) isGlobalAttribute() bool { return false }
-func (l *Local_Attributes) isConstant() bool        { return false }
-func (l *Local_Attributes) isTentative() bool       { return false }
-
-//###############################################################################
-//###############################################################################
-//###############################################################################
 
 type Symbol struct {
-	typ   Data_Type
-	attrs Identifier_Attributes
+	typ          Data_Type
+	attrs        AttributeEnum
+	defined      bool
+	global       bool
+	initializer  InitializerEnum
+	initialValue string
+	// TODO: need to handle other data types
 }
 
 var symbolTable = make(map[string]Symbol)
@@ -153,20 +71,18 @@ func typeCheckFuncDecl(decl Function_Declaration) {
 		if !oldDecl.typ.isEqual(&newTyp) {
 			fail("Incompatible function declarations for function", decl.name)
 		}
-		oldAttrs, _ := oldDecl.attrs.(*Function_Attributes)
-		alreadyDefined = oldAttrs.defined
+		alreadyDefined = oldDecl.defined
 		if alreadyDefined && hasBody {
 			fail("Function", decl.name, "has two definitions.")
 		}
 
-		if oldAttrs.global && decl.storageClass == STATIC_STORAGE_CLASS {
+		if oldDecl.global && decl.storageClass == STATIC_STORAGE_CLASS {
 			fail("Static function declaration follows non-static declaration of", decl.name)
 		}
-		global = oldAttrs.global
+		global = oldDecl.global
 	}
 
-	attrs := Function_Attributes{defined: (alreadyDefined || hasBody), global: global}
-	symbolTable[decl.name] = Symbol{typ: &newTyp, attrs: &attrs}
+	symbolTable[decl.name] = Symbol{typ: &newTyp, attrs: FUNCTION_ATTRIBUTES, defined: (alreadyDefined || hasBody), global: global}
 
 	if hasBody {
 		for _, param := range decl.params {
@@ -182,15 +98,18 @@ func typeCheckFuncDecl(decl Function_Declaration) {
 func typeCheckFileScopeVarDecl(decl Variable_Declaration) {
 	// every variable should have a unique name at this point, so it won't conflict with any existing entry
 	// TODO: need to handle other data types, could pass the initializer to a function and get a value back
-	var init Initial_Value = nil
+	var initializer InitializerEnum = NO_INITIALIZER
+	var initialValue string = ""
+
 	constIntExp, isConst := decl.initializer.(*Constant_Int_Expression)
 	if isConst {
-		init = &Initial_Int{value: constIntExp.intValue}
+		initializer = INITIAL_INT
+		initialValue = constIntExp.intValue
 	} else if decl.initializer == nil {
 		if decl.storageClass == EXTERN_STORAGE_CLASS {
-			init = &No_Initializer{}
+			initializer = NO_INITIALIZER
 		} else {
-			init = &Tentative{}
+			initializer = TENTATIVE_INIT
 		}
 	} else {
 		fail("Non-constant initializer for variable", decl.name)
@@ -205,24 +124,25 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) {
 			fail("Function redeclared as variable", decl.name)
 		}
 		if decl.storageClass == EXTERN_STORAGE_CLASS {
-			global = oldDecl.attrs.isGlobalAttribute()
-		} else if oldDecl.attrs.isGlobalAttribute() != global {
+			global = oldDecl.global
+		} else if oldDecl.global != global {
 			fail("Conflicting variable linkage")
 		}
 
-		if oldDecl.attrs.isConstant() {
-			if init.isConstantValue() {
+		if oldDecl.initializer == INITIAL_INT {
+			if initializer == INITIAL_INT {
 				fail("Conflicting file scope variable declarations")
 			} else {
-				init = oldDecl.attrs.(*Static_Attributes).init
+				initializer = oldDecl.initializer
+				initialValue = oldDecl.initialValue
 			}
-		} else if !init.isConstantValue() && oldDecl.attrs.isTentative() {
-			init = &Tentative{}
+		} else if (initializer != INITIAL_INT) && (oldDecl.initializer == TENTATIVE_INIT) {
+			initializer = TENTATIVE_INIT
 		}
 	}
 
-	attrs := Static_Attributes{init: init, global: global}
-	symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: &attrs}
+	symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: STATIC_ATTRIBUTES, global: global,
+		initializer: initializer, initialValue: initialValue}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -241,22 +161,26 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) {
 				fail("Function redeclared as variable")
 			}
 		} else {
-			symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: &Static_Attributes{init: &No_Initializer{}, global: true}}
+			symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: STATIC_ATTRIBUTES, global: true, initializer: NO_INITIALIZER}
 		}
 	} else if decl.storageClass == STATIC_STORAGE_CLASS {
 		// TODO: need to handle other data types
-		var init Initial_Value
+		var initializer InitializerEnum = NO_INITIALIZER
+		var initialValue string = ""
 		constIntExp, isConstInt := decl.initializer.(*Constant_Int_Expression)
 		if isConstInt {
-			init = &Initial_Int{value: constIntExp.intValue}
+			initializer = INITIAL_INT
+			initialValue = constIntExp.intValue
 		} else if decl.initializer == nil {
-			init = &Initial_Int{value: 0}
+			initializer = INITIAL_INT
+			initialValue = "0"
 		} else {
 			fail("Non-constant initializer on local static variable")
 		}
-		symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: &Static_Attributes{init: init, global: false}}
+		symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: STATIC_ATTRIBUTES, global: false,
+			initializer: initializer, initialValue: initialValue}
 	} else {
-		symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: &Local_Attributes{}}
+		symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: LOCAL_ATTRIBUTES}
 		if decl.initializer != nil {
 			typeCheckExpression(decl.initializer)
 		}
