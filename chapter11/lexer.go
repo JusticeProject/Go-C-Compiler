@@ -48,6 +48,8 @@ var regexp_continue_keyword *regexp.Regexp = regexp.MustCompile(`continue\b`)
 var regexp_comma *regexp.Regexp = regexp.MustCompile(`,`)
 var regexp_static_keyword *regexp.Regexp = regexp.MustCompile(`static\b`)
 var regexp_extern_keyword *regexp.Regexp = regexp.MustCompile(`extern\b`)
+var regexp_long_keyword *regexp.Regexp = regexp.MustCompile(`long\b`)
+var regexp_long_constant *regexp.Regexp = regexp.MustCompile(`[0-9]+[lL]\b`)
 
 type TokenEnum int
 
@@ -92,6 +94,8 @@ const (
 	COMMA_TOKEN
 	STATIC_KEYWORD_TOKEN
 	EXTERN_KEYWORD_TOKEN
+	LONG_KEYWORD_TOKEN
+	LONG_CONSTANT_TOKEN
 )
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -136,6 +140,8 @@ var allRegexp = map[TokenEnum]*regexp.Regexp{
 	COMMA_TOKEN:             regexp_comma,
 	STATIC_KEYWORD_TOKEN:    regexp_static_keyword,
 	EXTERN_KEYWORD_TOKEN:    regexp_extern_keyword,
+	LONG_KEYWORD_TOKEN:      regexp_long_keyword,
+	LONG_CONSTANT_TOKEN:     regexp_long_constant,
 }
 
 var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{
@@ -151,6 +157,7 @@ var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{
 	CONTINUE_KEYWORD_TOKEN: regexp_continue_keyword,
 	STATIC_KEYWORD_TOKEN:   regexp_static_keyword,
 	EXTERN_KEYWORD_TOKEN:   regexp_extern_keyword,
+	LONG_KEYWORD_TOKEN:     regexp_long_keyword,
 }
 
 /////////////////////////////////////////////////////////////////////////////////
