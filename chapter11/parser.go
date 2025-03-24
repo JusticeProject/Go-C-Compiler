@@ -60,32 +60,27 @@ func getStorageClass(token Token) StorageClassEnum {
 //###############################################################################
 //###############################################################################
 
-type Data_Type interface {
-	isEqual(input Data_Type) bool
-}
+type DataTypeEnum int
 
-/////////////////////////////////////////////////////////////////////////////////
+const (
+	NONE_TYPE DataTypeEnum = iota
+	INT_TYPE
+	LONG_TYPE
+	FUNCTION_TYPE
+)
 
-type Int_Type struct {
-}
+type Data_Type struct {
+	typ DataTypeEnum
 
-func (t *Int_Type) isEqual(input Data_Type) bool {
-	_, isIntType := input.(*Int_Type)
-	return isIntType
-}
-
-// TODO: could maybe switch these to enums in a Data_Type struct with paramCount
-
-/////////////////////////////////////////////////////////////////////////////////
-
-type Function_Type struct {
+	// for FUNCTION_TYPE
 	paramCount int
+
+	// TODO: if this struct changes, update isEqualType() also
 }
 
-func (t *Function_Type) isEqual(input Data_Type) bool {
-	converted, isFuncType := input.(*Function_Type)
-	if isFuncType {
-		return (t.paramCount == converted.paramCount)
+func (dt *Data_Type) isEqualType(input Data_Type) bool {
+	if (dt.typ == input.typ) && (dt.paramCount == input.paramCount) {
+		return true
 	}
 	return false
 }
@@ -455,7 +450,7 @@ func analyzeTypeAndStorageClass(specifiers []Token) (Data_Type, StorageClassEnum
 	for _, spec := range specifiers {
 		if spec.tokenType == INT_KEYWORD_TOKEN {
 			// TODO: other data types, isDataType()?
-			types = append(types, &Int_Type{})
+			types = append(types, Data_Type{typ: INT_TYPE})
 		} else {
 			storageClass := getStorageClass(spec)
 			storageClasses = append(storageClasses, storageClass)

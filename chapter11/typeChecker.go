@@ -24,13 +24,12 @@ const (
 /////////////////////////////////////////////////////////////////////////////////
 
 type Symbol struct {
-	typ          Data_Type
+	dataTyp      Data_Type
 	attrs        AttributeEnum
 	defined      bool
 	global       bool
 	initializer  InitializerEnum
 	initialValue string
-	// TODO: need to handle other data types
 }
 
 var symbolTable = make(map[string]Symbol)
@@ -61,14 +60,15 @@ func typeCheckFileScopeDeclaration(decl Declaration) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func typeCheckFuncDecl(decl Function_Declaration) {
-	newTyp := Function_Type{paramCount: len(decl.params)}
+	// TODO: add return type to newTyp
+	newTyp := Data_Type{typ: FUNCTION_TYPE, paramCount: len(decl.params)}
 	hasBody := (decl.body != nil)
 	alreadyDefined := false
 	global := (decl.storageClass != STATIC_STORAGE_CLASS)
 
 	oldDecl, inSymbolTable := symbolTable[decl.name]
 	if inSymbolTable {
-		if !oldDecl.typ.isEqual(&newTyp) {
+		if !oldDecl.dataTyp.isEqualType(newTyp) {
 			fail("Incompatible function declarations for function", decl.name)
 		}
 		alreadyDefined = oldDecl.defined
@@ -82,12 +82,12 @@ func typeCheckFuncDecl(decl Function_Declaration) {
 		global = oldDecl.global
 	}
 
-	symbolTable[decl.name] = Symbol{typ: &newTyp, attrs: FUNCTION_ATTRIBUTES, defined: (alreadyDefined || hasBody), global: global}
+	symbolTable[decl.name] = Symbol{dataTyp: newTyp, attrs: FUNCTION_ATTRIBUTES, defined: (alreadyDefined || hasBody), global: global}
 
 	if hasBody {
 		for _, param := range decl.params {
 			// every variable should have a unique name at this point, so it won't conflict with any existing entry
-			symbolTable[param] = Symbol{typ: &Int_Type{}}
+			symbolTable[param] = Symbol{dataTyp: Data_Type{typ: INT_TYPE}}
 		}
 		typeCheckBlock(*decl.body)
 	}
@@ -119,8 +119,7 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) {
 
 	oldDecl, alreadyExists := symbolTable[decl.name]
 	if alreadyExists {
-		_, isFunc := oldDecl.typ.(*Function_Type)
-		if isFunc {
+		if oldDecl.dataTyp.typ == FUNCTION_TYPE {
 			fail("Function redeclared as variable", decl.name)
 		}
 		if decl.storageClass == EXTERN_STORAGE_CLASS {
@@ -141,7 +140,7 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) {
 		}
 	}
 
-	symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: STATIC_ATTRIBUTES, global: global,
+	symbolTable[decl.name] = Symbol{dataTyp: Data_Type{typ: INT_TYPE}, attrs: STATIC_ATTRIBUTES, global: global,
 		initializer: initializer, initialValue: initialValue}
 }
 
@@ -156,12 +155,11 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) {
 		}
 		oldDecl, alreadyExists := symbolTable[decl.name]
 		if alreadyExists {
-			_, isFunc := oldDecl.typ.(*Function_Type)
-			if isFunc {
+			if oldDecl.dataTyp.typ == FUNCTION_TYPE {
 				fail("Function redeclared as variable")
 			}
 		} else {
-			symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: STATIC_ATTRIBUTES, global: true, initializer: NO_INITIALIZER}
+			symbolTable[decl.name] = Symbol{dataTyp: Data_Type{typ: INT_TYPE}, attrs: STATIC_ATTRIBUTES, global: true, initializer: NO_INITIALIZER}
 		}
 	} else if decl.storageClass == STATIC_STORAGE_CLASS {
 		// TODO: need to handle other data types
@@ -177,10 +175,10 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) {
 		} else {
 			fail("Non-constant initializer on local static variable")
 		}
-		symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: STATIC_ATTRIBUTES, global: false,
+		symbolTable[decl.name] = Symbol{dataTyp: Data_Type{typ: INT_TYPE}, attrs: STATIC_ATTRIBUTES, global: false,
 			initializer: initializer, initialValue: initialValue}
 	} else {
-		symbolTable[decl.name] = Symbol{typ: &Int_Type{}, attrs: LOCAL_ATTRIBUTES}
+		symbolTable[decl.name] = Symbol{dataTyp: Data_Type{typ: INT_TYPE}, attrs: LOCAL_ATTRIBUTES}
 		if decl.initializer != nil {
 			typeCheckExpression(decl.initializer)
 		}
@@ -266,8 +264,7 @@ func typeCheckExpression(exp Expression) {
 	switch convertedExp := exp.(type) {
 	case *Variable_Expression:
 		entry := symbolTable[convertedExp.name]
-		_, isFuncType := entry.typ.(*Function_Type)
-		if isFuncType {
+		if entry.dataTyp.typ == FUNCTION_TYPE {
 			fail("Function name", convertedExp.name, "used as variable")
 		}
 	case *Unary_Expression:
@@ -284,8 +281,9 @@ func typeCheckExpression(exp Expression) {
 		typeCheckExpression(convertedExp.rightExp)
 	case *Function_Call_Expression:
 		existingSymbol := symbolTable[convertedExp.functionName]
-		callType := Function_Type{paramCount: len(convertedExp.args)}
-		if !existingSymbol.typ.isEqual(&callType) {
+		// TODO: add return type to callType
+		callType := Data_Type{typ: FUNCTION_TYPE, paramCount: len(convertedExp.args)}
+		if !existingSymbol.dataTyp.isEqualType(callType) {
 			fail("Function call to", convertedExp.functionName, "does not match any known function declaration.")
 		}
 		for _, arg := range convertedExp.args {
