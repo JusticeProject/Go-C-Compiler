@@ -125,11 +125,12 @@ func (d *Variable_Declaration) getPrettyPrintLines() []string {
 
 func (f *Function_Declaration) getPrettyPrintLines() []string {
 
+	// TODO: print out the param types and return type
 	if f.body == nil {
 		// function declaration
 		lines := []string{"Function_Declaration(", doRightIndent(), "name=" + f.name + ","}
-		lines = append(lines, "params=")
-		lines = append(lines, strings.Join(f.params, ","))
+		lines = append(lines, "paramNames=")
+		lines = append(lines, strings.Join(f.paramNames, ","))
 		lines = append(lines, ",")
 		lines = append(lines, "storageClass="+getPrettyPrintStorageClass(f.storageClass))
 		lines = append(lines, doLeftIndent())
@@ -138,8 +139,8 @@ func (f *Function_Declaration) getPrettyPrintLines() []string {
 	} else {
 		// function definition
 		lines := []string{"Function_Definition(", doRightIndent(), "name=" + f.name + ","}
-		lines = append(lines, "params=")
-		lines = append(lines, strings.Join(f.params, ","))
+		lines = append(lines, "paramNames=")
+		lines = append(lines, strings.Join(f.paramNames, ","))
 		lines = append(lines, ",")
 		lines = append(lines, "body=")
 		moreLines := f.body.getPrettyPrintLines()
@@ -340,8 +341,8 @@ func (s *Null_Statement) getPrettyPrintLines() []string {
 //###############################################################################
 //###############################################################################
 
-func (e *Constant_Int_Expression) getPrettyPrintLines() []string {
-	line := "CONSTANT_INT_EXPRESSION" + "(" + e.intValue + ")"
+func (e *Constant_Value_Expression) getPrettyPrintLines() []string {
+	line := "CONSTANT_VALUE_EXPRESSION_" + getPrettyPrintDataType(e.typ) + "(" + e.value + ")"
 	return []string{line}
 }
 
@@ -349,6 +350,17 @@ func (e *Constant_Int_Expression) getPrettyPrintLines() []string {
 
 func (e *Variable_Expression) getPrettyPrintLines() []string {
 	return []string{"VARIABLE_EXPRESSION(" + e.name + ")"}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (e *Cast_Expression) getPrettyPrintLines() []string {
+	lines := []string{"CAST_EXPRESSION_" + getPrettyPrintDataType(e.targetType) + "(", doRightIndent()}
+	moreLines := e.exp.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+	return lines
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -496,4 +508,17 @@ func getPrettyPrintStorageClass(stCl StorageClassEnum) string {
 		return "EXTERN"
 	}
 	return ""
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func getPrettyPrintDataType(typ DataTypeEnum) string {
+	switch typ {
+	case INT_TYPE:
+		return "INT"
+	case LONG_TYPE:
+		return "LONG"
+	default:
+		return ""
+	}
 }

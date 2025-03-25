@@ -1,26 +1,8 @@
-int putchar(int c);
-
-int n;
-int np1;
-
-int fibonacci(void) {
-    int np2 = n + np1;
-
-    n = np1;
-    np1 = np2;
-
-    return np2;
+long sum(long a, long b) {
+    return a + b;
 }
 
 int main(void) {
-    n = -1;
-    np1 = 1;
-    int result = 0;
-
-    for (int i = 0; i <= 6; i=i+1) {
-        result = fibonacci();
-        putchar(result + 48);
-    }
-    putchar(10);
+    result = sum(9999999999999999, (long)2);
     return result;
 }

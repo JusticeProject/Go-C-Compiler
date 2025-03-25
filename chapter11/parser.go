@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 )
 
 //###############################################################################
@@ -24,14 +25,15 @@ type Declaration interface {
 type Variable_Declaration struct {
 	name         string
 	initializer  Expression
+	dTyp         Data_Type
 	storageClass StorageClassEnum
 }
 
 type Function_Declaration struct {
-	name string
-	// TODO: will need to change string to Identifier which will hold a string and a type?
-	params       []string
+	name         string
+	paramNames   []string
 	body         *Block
+	dTyp         Data_Type
 	storageClass StorageClassEnum
 }
 
@@ -73,16 +75,37 @@ type Data_Type struct {
 	typ DataTypeEnum
 
 	// for FUNCTION_TYPE
-	paramCount int
+	paramTypes []*Data_Type
+	returnType *Data_Type
 
 	// TODO: if this struct changes, update isEqualType() also
 }
 
-func (dt *Data_Type) isEqualType(input Data_Type) bool {
-	if (dt.typ == input.typ) && (dt.paramCount == input.paramCount) {
+func (dt *Data_Type) isEqualType(input *Data_Type) bool {
+	if dt == nil && input == nil {
 		return true
+	} else if dt == nil && input != nil {
+		return false
+	} else if dt != nil && input == nil {
+		return false
 	}
-	return false
+	// else both are not nil, so do a further comparison
+
+	if dt.typ != input.typ {
+		return false
+	}
+	if len(dt.paramTypes) != len(input.paramTypes) {
+		return false
+	}
+	for i := 0; i < len(dt.paramTypes); i++ {
+		if !dt.paramTypes[i].isEqualType(input.paramTypes[i]) {
+			return false
+		}
+	}
+	if !dt.returnType.isEqualType(input.returnType) {
+		return false
+	}
+	return true
 }
 
 //###############################################################################
@@ -197,15 +220,18 @@ type Expression interface {
 	getPrettyPrintLines() []string
 }
 
-// TODO: could maybe switch the Constant_Int_Expression to Constant_Value_Expression and use an enum
-// for the data type, a string could hold the value, use strings.ParseInt() to convert to int
-
-type Constant_Int_Expression struct {
-	intValue string
+type Constant_Value_Expression struct {
+	typ   DataTypeEnum
+	value string
 }
 
 type Variable_Expression struct {
 	name string
+}
+
+type Cast_Expression struct {
+	targetType DataTypeEnum
+	exp        Expression
 }
 
 type Unary_Expression struct {
@@ -377,29 +403,30 @@ func parseDeclaration(tokens []Token) (Declaration, []Token) {
 	if len(specifiers) == 0 {
 		return nil, tokens
 	}
-	_, storageClass := analyzeTypeAndStorageClass(specifiers)
+	typ, storageClass := analyzeTypeAndStorageClass(specifiers)
 	name, tokens := parseIdentifier(tokens)
 
 	if peekToken(tokens).tokenType == OPEN_PARENTHESIS_TOKEN {
 		// it's a function declaration or definition
 		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
-		params, tokens := parseParamList(tokens)
+		paramNames, paramTypes, tokens := parseParamList(tokens)
 		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+		funcType := Data_Type{typ: FUNCTION_TYPE, paramTypes: paramTypes, returnType: &Data_Type{typ: typ}}
 
 		if peekToken(tokens).tokenType == SEMICOLON_TOKEN {
 			// it's a function declaration
 			_, tokens = expect(SEMICOLON_TOKEN, tokens)
-			fn := Function_Declaration{name: name, params: params, body: nil, storageClass: storageClass}
+			fn := Function_Declaration{name: name, paramNames: paramNames, body: nil, dTyp: funcType, storageClass: storageClass}
 			return &fn, tokens
 		} else {
 			// it's a function definition
 			block, tokens := parseBlock(tokens)
-			fn := Function_Declaration{name: name, params: params, body: &block, storageClass: storageClass}
+			fn := Function_Declaration{name: name, paramNames: paramNames, body: &block, dTyp: funcType, storageClass: storageClass}
 			return &fn, tokens
 		}
 	} else {
 		// it's a variable declaration
-		decl := Variable_Declaration{name: name, storageClass: storageClass}
+		decl := Variable_Declaration{name: name, dTyp: Data_Type{typ: typ}, storageClass: storageClass}
 
 		if peekToken(tokens).tokenType == EQUAL_TOKEN {
 			// it has an initializer
@@ -433,6 +460,8 @@ func isSpecifier(token Token) bool {
 	switch token.tokenType {
 	case INT_KEYWORD_TOKEN:
 		return true
+	case LONG_KEYWORD_TOKEN:
+		return true
 	case STATIC_KEYWORD_TOKEN:
 		return true
 	case EXTERN_KEYWORD_TOKEN:
@@ -444,48 +473,97 @@ func isSpecifier(token Token) bool {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func analyzeTypeAndStorageClass(specifiers []Token) (Data_Type, StorageClassEnum) {
-	types := []Data_Type{}
-	storageClasses := []StorageClassEnum{}
-	for _, spec := range specifiers {
-		if spec.tokenType == INT_KEYWORD_TOKEN {
-			// TODO: other data types, isDataType()?
-			types = append(types, Data_Type{typ: INT_TYPE})
-		} else {
-			storageClass := getStorageClass(spec)
-			storageClasses = append(storageClasses, storageClass)
+func isSpecifierInList(tokenType TokenEnum, specifiers []Token) bool {
+	for index, _ := range specifiers {
+		if specifiers[index].tokenType == tokenType {
+			return true
+		}
+	}
+	return false
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func analyzeType(specifiers []Token) DataTypeEnum {
+	if len(specifiers) == 1 && isSpecifierInList(INT_KEYWORD_TOKEN, specifiers) {
+		return INT_TYPE
+	}
+
+	if isSpecifierInList(LONG_KEYWORD_TOKEN, specifiers) {
+		if len(specifiers) == 1 {
+			return LONG_TYPE
+		}
+		if len(specifiers) == 2 && isSpecifierInList(INT_KEYWORD_TOKEN, specifiers) {
+			return LONG_TYPE
 		}
 	}
 
-	if len(types) != 1 {
-		fail("Invalid type specifier")
-	}
-	if len(storageClasses) > 1 {
-		fail("Invalid storage class")
-	}
+	fail("Invalid type specifier")
+	return NONE_TYPE
+}
 
-	if len(storageClasses) == 1 {
-		return types[0], storageClasses[0]
-	} else {
-		return types[0], NONE_STORAGE_CLASS
+/////////////////////////////////////////////////////////////////////////////////
+
+func isDataTypeKeyword(token Token) bool {
+	switch token.tokenType {
+	case INT_KEYWORD_TOKEN:
+		return true
+	case LONG_KEYWORD_TOKEN:
+		return true
+	default:
+		return false
 	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseParamList(tokens []Token) ([]string, []Token) {
-	params := []string{}
+func analyzeTypeAndStorageClass(specifiers []Token) (DataTypeEnum, StorageClassEnum) {
+	types := []Token{}
+	storageClasses := []Token{}
+	for _, spec := range specifiers {
+		if isDataTypeKeyword(spec) {
+			types = append(types, spec)
+		} else {
+			storageClasses = append(storageClasses, spec)
+		}
+	}
+
+	typ := analyzeType(types)
+
+	if len(storageClasses) > 1 {
+		fail("Invalid storage class")
+	}
+
+	storageClass := NONE_STORAGE_CLASS
+	if len(storageClasses) == 1 {
+		storageClass = getStorageClass(storageClasses[0])
+	}
+
+	return typ, storageClass
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseParamList(tokens []Token) ([]string, []*Data_Type, []Token) {
+	paramNames := []string{}
+	paramTypes := []*Data_Type{}
 
 	if peekToken(tokens).tokenType == VOID_KEYWORD_TOKEN {
+		// there are no params
 		_, tokens = expect(VOID_KEYWORD_TOKEN, tokens)
 	} else {
 		foundComma := false
 		for (peekToken(tokens).tokenType != CLOSE_PARENTHESIS_TOKEN) || foundComma {
-			// TODO: need to handle other data types, static and extern are not allowed for params
-			_, tokens = expect(INT_KEYWORD_TOKEN, tokens)
+			// get the type, static and extern are not allowed for params
+			var specifiers []Token
+			specifiers, tokens = parseSpecifiers(tokens)
+			typ := analyzeType(specifiers)
+			paramTypes = append(paramTypes, &Data_Type{typ: typ})
+
+			// get the name
 			var id string
 			id, tokens = parseIdentifier(tokens)
-			params = append(params, id)
+			paramNames = append(paramNames, id)
 			if peekToken(tokens).tokenType == COMMA_TOKEN {
 				_, tokens = expect(COMMA_TOKEN, tokens)
 				foundComma = true
@@ -495,7 +573,7 @@ func parseParamList(tokens []Token) ([]string, []Token) {
 		}
 	}
 
-	return params, tokens
+	return paramNames, paramTypes, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -540,7 +618,6 @@ func parseBlock(tokens []Token) (Block, []Token) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseBlockItem(tokens []Token) (Block_Item, []Token) {
-	// TODO: need to handle other data types
 	if isSpecifier(peekToken(tokens)) {
 		// it's a declaration
 		decl, tokens := parseDeclaration(tokens)
@@ -560,6 +637,7 @@ func parseForInitial(tokens []Token) (For_Initial_Clause, []Token) {
 	// TODO: use helper function isDataType(nextToken) to check if next token is one of the keywords int, bool, float, etc.
 	nextToken := peekToken(tokens)
 
+	// TODO:
 	if nextToken.tokenType == INT_KEYWORD_TOKEN {
 		decl, tokens := parseDeclaration(tokens)
 		varDecl, ok := decl.(*Variable_Declaration)
@@ -740,9 +818,9 @@ func getPrecedence(token Token) int {
 func parseFactor(tokens []Token) (Expression, []Token) {
 	nextToken := peekToken(tokens)
 
-	if nextToken.tokenType == INT_CONSTANT_TOKEN {
-		integer, tokens := parseInteger(tokens)
-		ex := Constant_Int_Expression{intValue: integer}
+	if constantTokenToDataType(nextToken) != NONE_TYPE {
+		value, typ, tokens := parseConstantValue(tokens)
+		ex := Constant_Value_Expression{typ: typ, value: value}
 		return &ex, tokens
 	} else if nextToken.tokenType == IDENTIFIER_TOKEN {
 		name, tokens := parseIdentifier(tokens)
@@ -764,10 +842,21 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 		unExp := Unary_Expression{innerExp: innerExp, unOp: unopType}
 		return &unExp, tokens
 	} else if nextToken.tokenType == OPEN_PARENTHESIS_TOKEN {
-		_, tokens := expect(OPEN_PARENTHESIS_TOKEN, tokens)
-		innerExp, tokens := parseExpression(tokens, 0)
-		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
-		return innerExp, tokens
+		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
+		if isDataTypeKeyword(peekToken(tokens)) {
+			// must be a cast expression
+			specifiers, tokens := parseSpecifiers(tokens)
+			typ := analyzeType(specifiers)
+			_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+			exp, tokens := parseFactor(tokens)
+			cast := Cast_Expression{targetType: typ, exp: exp}
+			return &cast, tokens
+		} else {
+			// must be another expression within parentheses
+			innerExp, tokens := parseExpression(tokens, 0)
+			_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+			return innerExp, tokens
+		}
 	} else {
 		fail("Malformed expression. Unexpected", allRegexp[nextToken.tokenType].String())
 	}
@@ -802,11 +891,36 @@ func parseIdentifier(tokens []Token) (string, []Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseInteger(tokens []Token) (string, []Token) {
-	currentToken, tokens := expect(INT_CONSTANT_TOKEN, tokens)
-	// TODO: what about 8, 16, 64-bit integers?
-	//integer, _ := strconv.ParseInt(currentToken.word, 10, 64)
-	return currentToken.word, tokens
+func constantTokenToDataType(token Token) DataTypeEnum {
+	switch token.tokenType {
+	case INT_CONSTANT_TOKEN:
+		return INT_TYPE
+	case LONG_CONSTANT_TOKEN:
+		return LONG_TYPE
+	default:
+		return NONE_TYPE
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseConstantValue(tokens []Token) (string, DataTypeEnum, []Token) {
+	currentToken, tokens := expectMultiple([]TokenEnum{INT_CONSTANT_TOKEN, LONG_CONSTANT_TOKEN}, tokens)
+
+	dataTyp := constantTokenToDataType(currentToken)
+
+	if (dataTyp == INT_TYPE) || (dataTyp == LONG_TYPE) {
+		integer, err := strconv.ParseInt(currentToken.word, 10, 64)
+		if err != nil {
+			fail("Could not parse integer:", err.Error())
+		}
+
+		if (dataTyp == INT_TYPE) && (integer > 2^31-1) {
+			dataTyp = LONG_TYPE
+		}
+	}
+
+	return currentToken.word, dataTyp, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -815,8 +929,25 @@ func expect(expected TokenEnum, tokens []Token) (Token, []Token) {
 	actual, tokens := takeToken(tokens)
 
 	if actual.tokenType != expected {
-		// TODO: make this error msg more human readable, need function to convert TokenEnum to string
 		fail("Syntax error. Expected", allRegexp[expected].String(), "but found", allRegexp[actual.tokenType].String())
+	}
+
+	return actual, tokens
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func expectMultiple(expected []TokenEnum, tokens []Token) (Token, []Token) {
+	actual, tokens := takeToken(tokens)
+
+	found := false
+	for index, _ := range expected {
+		if expected[index] == actual.tokenType {
+			found = true
+		}
+	}
+	if !found {
+		fail("Syntax error. Unexpected", actual.word)
 	}
 
 	return actual, tokens
