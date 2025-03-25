@@ -634,11 +634,9 @@ func parseBlockItem(tokens []Token) (Block_Item, []Token) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseForInitial(tokens []Token) (For_Initial_Clause, []Token) {
-	// TODO: use helper function isDataType(nextToken) to check if next token is one of the keywords int, bool, float, etc.
 	nextToken := peekToken(tokens)
 
-	// TODO:
-	if nextToken.tokenType == INT_KEYWORD_TOKEN {
+	if isDataTypeKeyword(nextToken) {
 		decl, tokens := parseDeclaration(tokens)
 		varDecl, ok := decl.(*Variable_Declaration)
 		if ok {
