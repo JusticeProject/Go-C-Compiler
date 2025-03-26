@@ -49,7 +49,7 @@ var regexp_comma *regexp.Regexp = regexp.MustCompile(`,`)
 var regexp_static_keyword *regexp.Regexp = regexp.MustCompile(`static\b`)
 var regexp_extern_keyword *regexp.Regexp = regexp.MustCompile(`extern\b`)
 var regexp_long_keyword *regexp.Regexp = regexp.MustCompile(`long\b`)
-var regexp_long_constant *regexp.Regexp = regexp.MustCompile(`[0-9]+[lL]\b`)
+var regexp_long_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+)[lL]\b`)
 
 type TokenEnum int
 
@@ -192,14 +192,15 @@ func getNextToken(contents string) (newContents string, token Token) {
 	newContents = strings.TrimLeft(contents, " \n\r\t")
 
 	// use the regexp to find the longest match at beginning
-	enum, start, end := longestMatchAtStart(newContents)
+	enum, start, end, groupStart, groupEnd := longestMatchAtStart(newContents)
 	//fmt.Printf("%v %v %v\n", enum, start, end)
 
 	// gather the token info
-	token = Token{word: newContents[start:end], tokenType: enum}
+	token = Token{word: newContents[groupStart:groupEnd], tokenType: enum}
 
 	// remove the word from the beginning of the string
-	newContents = strings.TrimPrefix(newContents, token.word)
+	textToTrim := newContents[start:end]
+	newContents = strings.TrimPrefix(newContents, textToTrim)
 
 	// the regexp for identifiers might also match keywords, keywords should take priority
 	// so switch the enum from identifier to keyword if necessary
@@ -212,12 +213,13 @@ func getNextToken(contents string) (newContents string, token Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func longestMatchAtStart(contents string) (TokenEnum, int, int) {
+func longestMatchAtStart(contents string) (TokenEnum, int, int, int, int) {
 	start, end := 0, 0
+	groupStart, groupEnd := 0, 0
 	var detectedTokenType TokenEnum = NONE_TOKEN
 
 	for enum, re := range allRegexp {
-		result := re.FindStringIndex(contents)
+		result := re.FindStringSubmatchIndex(contents)
 
 		// if it found something and if the first index is at the beginning of the string
 		if result != nil && result[0] == 0 {
@@ -226,11 +228,21 @@ func longestMatchAtStart(contents string) (TokenEnum, int, int) {
 				detectedTokenType = enum
 				start = result[0]
 				end = result[1]
+
+				// save the group if there is one
+				if len(result) > 2 {
+					groupStart = result[2]
+					groupEnd = result[3]
+				}
 			}
 		}
 	}
 
-	return detectedTokenType, start, end
+	if (groupStart == 0) && (groupEnd == 0) {
+		groupStart = start
+		groupEnd = end
+	}
+	return detectedTokenType, start, end, groupStart, groupEnd
 }
 
 /////////////////////////////////////////////////////////////////////////////////
