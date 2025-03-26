@@ -102,10 +102,7 @@ func (dt *Data_Type) isEqualType(input *Data_Type) bool {
 			return false
 		}
 	}
-	if !dt.returnType.isEqualType(input.returnType) {
-		return false
-	}
-	return true
+	return dt.returnType.isEqualType(input.returnType)
 }
 
 //###############################################################################
@@ -221,33 +218,39 @@ type Expression interface {
 }
 
 type Constant_Value_Expression struct {
-	typ   DataTypeEnum
-	value string
+	typ       DataTypeEnum
+	value     string
+	resultTyp DataTypeEnum
 }
 
 type Variable_Expression struct {
-	name string
+	name      string
+	resultTyp DataTypeEnum
 }
 
 type Cast_Expression struct {
 	targetType DataTypeEnum
-	exp        Expression
+	innerExp   Expression
+	resultTyp  DataTypeEnum
 }
 
 type Unary_Expression struct {
-	unOp     UnaryOperatorType
-	innerExp Expression
+	unOp      UnaryOperatorType
+	innerExp  Expression
+	resultTyp DataTypeEnum
 }
 
 type Binary_Expression struct {
-	binOp    BinaryOperatorType
-	firstExp Expression
-	secExp   Expression
+	binOp     BinaryOperatorType
+	firstExp  Expression
+	secExp    Expression
+	resultTyp DataTypeEnum
 }
 
 type Assignment_Expression struct {
-	lvalue   Expression
-	rightExp Expression
+	lvalue    Expression
+	rightExp  Expression
+	resultTyp DataTypeEnum
 }
 
 // example: a == 3 ? 1 : 2
@@ -255,11 +258,13 @@ type Conditional_Expression struct {
 	condition Expression
 	middleExp Expression
 	rightExp  Expression
+	resultTyp DataTypeEnum
 }
 
 type Function_Call_Expression struct {
 	functionName string
 	args         []Expression
+	resultTyp    DataTypeEnum
 }
 
 //###############################################################################
@@ -831,7 +836,7 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 			return &f, tokens
 		} else {
 			// it's just a variable expression
-			v := Variable_Expression{name}
+			v := Variable_Expression{name: name}
 			return &v, tokens
 		}
 	} else if nextToken.tokenType == TILDE_TOKEN || nextToken.tokenType == HYPHEN_TOKEN || nextToken.tokenType == EXCLAMATION_TOKEN {
@@ -847,7 +852,7 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 			typ := analyzeType(specifiers)
 			_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
 			exp, tokens := parseFactor(tokens)
-			cast := Cast_Expression{targetType: typ, exp: exp}
+			cast := Cast_Expression{targetType: typ, innerExp: exp}
 			return &cast, tokens
 		} else {
 			// must be another expression within parentheses

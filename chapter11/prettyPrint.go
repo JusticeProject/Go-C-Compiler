@@ -356,7 +356,7 @@ func (e *Variable_Expression) getPrettyPrintLines() []string {
 
 func (e *Cast_Expression) getPrettyPrintLines() []string {
 	lines := []string{"CAST_EXPRESSION_" + getPrettyPrintDataType(e.targetType) + "(", doRightIndent()}
-	moreLines := e.exp.getPrettyPrintLines()
+	moreLines := e.innerExp.getPrettyPrintLines()
 	lines = append(lines, moreLines...)
 	lines = append(lines, doLeftIndent())
 	lines = append(lines, ")")
