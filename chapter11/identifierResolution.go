@@ -66,7 +66,7 @@ func resolveFunctionDeclaration(decl Function_Declaration, identifierMap map[str
 	// the list of function parameters in a declaration starts a new scope, so we need a copy of the map to track them
 	innerMap := copyIdentifierMap(identifierMap)
 	newParams := []string{}
-	for _, param := range decl.params {
+	for _, param := range decl.paramNames {
 		newParam := resolveParam(param, innerMap)
 		newParams = append(newParams, newParam)
 	}
@@ -76,7 +76,7 @@ func resolveFunctionDeclaration(decl Function_Declaration, identifierMap map[str
 		tempBody := resolveBlock(*decl.body, innerMap)
 		newBody = &tempBody
 	}
-	return Function_Declaration{name: decl.name, params: newParams, body: newBody, storageClass: decl.storageClass}
+	return Function_Declaration{name: decl.name, paramNames: newParams, body: newBody, dTyp: decl.dTyp, storageClass: decl.storageClass}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -248,15 +248,18 @@ func resolveExpression(exp Expression, identifierMap map[string]Identifier_Info)
 	}
 
 	switch convertedExp := exp.(type) {
-	case *Constant_Int_Expression:
+	case *Constant_Value_Expression:
 		return exp
 	case *Variable_Expression:
 		idInfo, varExists := identifierMap[convertedExp.name]
 		if varExists {
-			return &Variable_Expression{idInfo.uniqueName}
+			return &Variable_Expression{name: idInfo.uniqueName}
 		} else {
 			fail("Semantic error. Undeclared variable:", convertedExp.name)
 		}
+	case *Cast_Expression:
+		newExp := resolveExpression(convertedExp.innerExp, identifierMap)
+		return &Cast_Expression{targetType: convertedExp.targetType, innerExp: newExp}
 	case *Unary_Expression:
 		newInner := resolveExpression(convertedExp.innerExp, identifierMap)
 		return &Unary_Expression{unOp: convertedExp.unOp, innerExp: newInner}

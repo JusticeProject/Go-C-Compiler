@@ -7,8 +7,21 @@ type InitializerEnum int
 const (
 	NO_INITIALIZER InitializerEnum = iota
 	INITIAL_INT
+	INITIAL_LONG
 	TENTATIVE_INIT
 )
+
+func dataTypeEnumToInitEnum(input DataTypeEnum) InitializerEnum {
+	switch input {
+	case INT_TYPE:
+		return INITIAL_INT
+	case LONG_TYPE:
+		return INITIAL_LONG
+	}
+
+	fail("Can't convert DataTypeEnum to InitializerEnum")
+	return NO_INITIALIZER
+}
 
 /////////////////////////////////////////////////////////////////////////////////
 
@@ -28,7 +41,7 @@ type Symbol struct {
 	attrs        AttributeEnum
 	defined      bool
 	global       bool
-	initializer  InitializerEnum
+	initEnum     InitializerEnum
 	initialValue string
 }
 
@@ -38,9 +51,91 @@ var symbolTable = make(map[string]Symbol)
 //###############################################################################
 //###############################################################################
 
+func setResultType(exp Expression, typ DataTypeEnum) Expression {
+	switch convertedExp := exp.(type) {
+	case *Constant_Value_Expression:
+		convertedExp.resultTyp = typ
+		return convertedExp
+	case *Variable_Expression:
+		convertedExp.resultTyp = typ
+		return convertedExp
+	case *Cast_Expression:
+		convertedExp.resultTyp = typ
+		return convertedExp
+	case *Unary_Expression:
+		convertedExp.resultTyp = typ
+		return convertedExp
+	case *Binary_Expression:
+		convertedExp.resultTyp = typ
+		return convertedExp
+	case *Assignment_Expression:
+		convertedExp.resultTyp = typ
+		return convertedExp
+	case *Conditional_Expression:
+		convertedExp.resultTyp = typ
+		return convertedExp
+	case *Function_Call_Expression:
+		convertedExp.resultTyp = typ
+		return convertedExp
+	default:
+		fail("Unknown Expression in setResultType")
+	}
+	return nil
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func getResultType(exp Expression) DataTypeEnum {
+	switch convertedExp := exp.(type) {
+	case *Constant_Value_Expression:
+		return convertedExp.resultTyp
+	case *Variable_Expression:
+		return convertedExp.resultTyp
+	case *Cast_Expression:
+		return convertedExp.resultTyp
+	case *Unary_Expression:
+		return convertedExp.resultTyp
+	case *Binary_Expression:
+		return convertedExp.resultTyp
+	case *Assignment_Expression:
+		return convertedExp.resultTyp
+	case *Conditional_Expression:
+		return convertedExp.resultTyp
+	case *Function_Call_Expression:
+		return convertedExp.resultTyp
+	default:
+		fail("Unknown Expression in setResultType")
+	}
+	return NONE_TYPE
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func convertToType(exp Expression, newTyp DataTypeEnum) Expression {
+	if getResultType(exp) == newTyp {
+		return exp
+	}
+	castExp := Cast_Expression{targetType: newTyp, innerExp: exp}
+	return setResultType(&castExp, newTyp)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func getCommonType(typ1 DataTypeEnum, typ2 DataTypeEnum) DataTypeEnum {
+	if typ1 == typ2 {
+		return typ1
+	} else {
+		return LONG_TYPE
+	}
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
 func doTypeChecking(ast Program) Program {
 	for index, _ := range ast.decls {
-		typeCheckFileScopeDeclaration(ast.decls[index])
+		ast.decls[index] = typeCheckFileScopeDeclaration(ast.decls[index])
 	}
 
 	return ast
@@ -48,27 +143,29 @@ func doTypeChecking(ast Program) Program {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckFileScopeDeclaration(decl Declaration) {
+func typeCheckFileScopeDeclaration(decl Declaration) Declaration {
 	switch convertedDecl := decl.(type) {
 	case *Function_Declaration:
-		typeCheckFuncDecl(*convertedDecl)
+		newDecl := typeCheckFuncDecl(*convertedDecl)
+		return &newDecl
 	case *Variable_Declaration:
-		typeCheckFileScopeVarDecl(*convertedDecl)
+		newDecl := typeCheckFileScopeVarDecl(*convertedDecl)
+		return &newDecl
 	}
+	return nil
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckFuncDecl(decl Function_Declaration) {
-	// TODO: add return type to newTyp
-	newTyp := Data_Type{typ: FUNCTION_TYPE, paramCount: len(decl.params)}
+func typeCheckFuncDecl(decl Function_Declaration) Function_Declaration {
+	newTyp := decl.dTyp
 	hasBody := (decl.body != nil)
 	alreadyDefined := false
 	global := (decl.storageClass != STATIC_STORAGE_CLASS)
 
 	oldDecl, inSymbolTable := symbolTable[decl.name]
 	if inSymbolTable {
-		if !oldDecl.dataTyp.isEqualType(newTyp) {
+		if !oldDecl.dataTyp.isEqualType(&newTyp) {
 			fail("Incompatible function declarations for function", decl.name)
 		}
 		alreadyDefined = oldDecl.defined
@@ -85,31 +182,36 @@ func typeCheckFuncDecl(decl Function_Declaration) {
 	symbolTable[decl.name] = Symbol{dataTyp: newTyp, attrs: FUNCTION_ATTRIBUTES, defined: (alreadyDefined || hasBody), global: global}
 
 	if hasBody {
-		for _, param := range decl.params {
+		for index, paramName := range decl.paramNames {
+			paramType := decl.dTyp.paramTypes[index].typ
 			// every variable should have a unique name at this point, so it won't conflict with any existing entry
-			symbolTable[param] = Symbol{dataTyp: Data_Type{typ: INT_TYPE}}
+			symbolTable[paramName] = Symbol{dataTyp: Data_Type{typ: paramType}}
 		}
-		typeCheckBlock(*decl.body)
+		*decl.body = typeCheckBlock(*decl.body, decl.name)
 	}
+
+	return decl
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckFileScopeVarDecl(decl Variable_Declaration) {
+func typeCheckFileScopeVarDecl(decl Variable_Declaration) Variable_Declaration {
 	// every variable should have a unique name at this point, so it won't conflict with any existing entry
-	// TODO: need to handle other data types, could pass the initializer to a function and get a value back
-	var initializer InitializerEnum = NO_INITIALIZER
+	var initEnum InitializerEnum = NO_INITIALIZER
 	var initialValue string = ""
 
-	constIntExp, isConst := decl.initializer.(*Constant_Int_Expression)
+	constValExp, isConst := decl.initializer.(*Constant_Value_Expression)
 	if isConst {
-		initializer = INITIAL_INT
-		initialValue = constIntExp.intValue
+		initEnum = dataTypeEnumToInitEnum(decl.dTyp.typ)
+		decl.initializer = convertToType(decl.initializer, decl.dTyp.typ)
+		// TODO: if the constant value is a long that doesn't fit into an int (2147483650L) then
+		// strconv.ParseInt(value, 10, 64), then cast int64 to int32 (for example), then back to string
+		initialValue = constValExp.value
 	} else if decl.initializer == nil {
 		if decl.storageClass == EXTERN_STORAGE_CLASS {
-			initializer = NO_INITIALIZER
+			initEnum = NO_INITIALIZER
 		} else {
-			initializer = TENTATIVE_INIT
+			initEnum = TENTATIVE_INIT
 		}
 	} else {
 		fail("Non-constant initializer for variable", decl.name)
@@ -119,8 +221,8 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) {
 
 	oldDecl, alreadyExists := symbolTable[decl.name]
 	if alreadyExists {
-		if oldDecl.dataTyp.typ == FUNCTION_TYPE {
-			fail("Function redeclared as variable", decl.name)
+		if !oldDecl.dataTyp.isEqualType(&decl.dTyp) {
+			fail("Data types don't match for variable", decl.name)
 		}
 		if decl.storageClass == EXTERN_STORAGE_CLASS {
 			global = oldDecl.global
@@ -128,168 +230,252 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) {
 			fail("Conflicting variable linkage")
 		}
 
-		if oldDecl.initializer == INITIAL_INT {
-			if initializer == INITIAL_INT {
+		// TODO: update this when more types are available, and the else if below
+		if (oldDecl.initEnum == INITIAL_INT) || (oldDecl.initEnum == INITIAL_LONG) {
+			if initEnum == oldDecl.initEnum {
 				fail("Conflicting file scope variable declarations")
 			} else {
-				initializer = oldDecl.initializer
+				initEnum = oldDecl.initEnum
 				initialValue = oldDecl.initialValue
 			}
-		} else if (initializer != INITIAL_INT) && (oldDecl.initializer == TENTATIVE_INIT) {
-			initializer = TENTATIVE_INIT
+		} else if (initEnum != INITIAL_INT) && (initEnum != INITIAL_LONG) && (oldDecl.initEnum == TENTATIVE_INIT) {
+			initEnum = TENTATIVE_INIT
 		}
 	}
 
-	symbolTable[decl.name] = Symbol{dataTyp: Data_Type{typ: INT_TYPE}, attrs: STATIC_ATTRIBUTES, global: global,
-		initializer: initializer, initialValue: initialValue}
+	symbolTable[decl.name] = Symbol{dataTyp: decl.dTyp, attrs: STATIC_ATTRIBUTES, global: global,
+		initEnum: initEnum, initialValue: initialValue}
+
+	return decl
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckLocalVarDecl(decl Variable_Declaration) {
+func typeCheckLocalVarDecl(decl Variable_Declaration) Variable_Declaration {
 	// every variable should have a unique name at this point, so it won't conflict with any existing entry
-	// TODO: need to handle other data types
 	if decl.storageClass == EXTERN_STORAGE_CLASS {
 		if decl.initializer != nil {
 			fail("Initializer on local extern variable declaration")
 		}
 		oldDecl, alreadyExists := symbolTable[decl.name]
 		if alreadyExists {
-			if oldDecl.dataTyp.typ == FUNCTION_TYPE {
-				fail("Function redeclared as variable")
+			if !oldDecl.dataTyp.isEqualType(&decl.dTyp) {
+				fail("Data types don't match for variable", decl.name)
 			}
 		} else {
-			symbolTable[decl.name] = Symbol{dataTyp: Data_Type{typ: INT_TYPE}, attrs: STATIC_ATTRIBUTES, global: true, initializer: NO_INITIALIZER}
+			symbolTable[decl.name] = Symbol{dataTyp: decl.dTyp, attrs: STATIC_ATTRIBUTES, global: true, initEnum: NO_INITIALIZER}
 		}
 	} else if decl.storageClass == STATIC_STORAGE_CLASS {
-		// TODO: need to handle other data types
-		var initializer InitializerEnum = NO_INITIALIZER
+		var initEnum InitializerEnum = NO_INITIALIZER
 		var initialValue string = ""
-		constIntExp, isConstInt := decl.initializer.(*Constant_Int_Expression)
-		if isConstInt {
-			initializer = INITIAL_INT
-			initialValue = constIntExp.intValue
+		constValExp, isConstVal := decl.initializer.(*Constant_Value_Expression)
+		if isConstVal {
+			initEnum = dataTypeEnumToInitEnum(decl.dTyp.typ)
+			decl.initializer = convertToType(decl.initializer, decl.dTyp.typ)
+			// TODO:
+			// if the constant value is a long that doesn't fit into an int (2147483650L) then
+			// strconv.ParseInt(value, 10, 64), then cast int64 to int32 (for example), then back to string
+			initialValue = constValExp.value
 		} else if decl.initializer == nil {
-			initializer = INITIAL_INT
+			initEnum = dataTypeEnumToInitEnum(decl.dTyp.typ)
 			initialValue = "0"
 		} else {
 			fail("Non-constant initializer on local static variable")
 		}
-		symbolTable[decl.name] = Symbol{dataTyp: Data_Type{typ: INT_TYPE}, attrs: STATIC_ATTRIBUTES, global: false,
-			initializer: initializer, initialValue: initialValue}
+		symbolTable[decl.name] = Symbol{dataTyp: decl.dTyp, attrs: STATIC_ATTRIBUTES, global: false,
+			initEnum: initEnum, initialValue: initialValue}
 	} else {
-		symbolTable[decl.name] = Symbol{dataTyp: Data_Type{typ: INT_TYPE}, attrs: LOCAL_ATTRIBUTES}
+		// it's an automatic variable
+		symbolTable[decl.name] = Symbol{dataTyp: decl.dTyp, attrs: LOCAL_ATTRIBUTES}
 		if decl.initializer != nil {
-			typeCheckExpression(decl.initializer)
+			decl.initializer = typeCheckExpression(decl.initializer)
+			decl.initializer = setResultType(decl.initializer, decl.dTyp.typ)
 		}
 	}
+	return decl
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckBlock(b Block) {
-	for _, item := range b.items {
-		typeCheckBlockItem(item)
+func typeCheckBlock(b Block, funcName string) Block {
+	for index, _ := range b.items {
+		b.items[index] = typeCheckBlockItem(b.items[index], funcName)
 	}
+	return b
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckBlockItem(bi Block_Item) {
+func typeCheckBlockItem(bi Block_Item, funcName string) Block_Item {
 	switch convertedItem := bi.(type) {
 	case *Block_Statement:
-		typeCheckStatement(convertedItem.st)
+		convertedItem.st = typeCheckStatement(convertedItem.st, funcName)
+		return convertedItem
 	case *Block_Declaration:
 		decl, isVarDecl := convertedItem.decl.(*Variable_Declaration)
 		if isVarDecl {
-			typeCheckLocalVarDecl(*decl)
+			newDecl := typeCheckLocalVarDecl(*decl)
+			convertedItem.decl = &newDecl
+			return convertedItem
 		} else {
 			funcDecl := convertedItem.decl.(*Function_Declaration)
-			typeCheckFuncDecl(*funcDecl)
+			newFuncDecl := typeCheckFuncDecl(*funcDecl)
+			convertedItem.decl = &newFuncDecl
+			return convertedItem
 		}
 	}
+	return nil
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckStatement(st Statement) {
+func typeCheckStatement(st Statement, funcName string) Statement {
 	switch convertedSt := st.(type) {
 	case *Return_Statement:
-		typeCheckExpression(convertedSt.exp)
+		convertedSt.exp = typeCheckExpression(convertedSt.exp)
+		retType := symbolTable[funcName].dataTyp.returnType.typ
+		convertedSt.exp = convertToType(convertedSt.exp, retType)
+		return convertedSt
 	case *Expression_Statement:
-		typeCheckExpression(convertedSt.exp)
+		convertedSt.exp = typeCheckExpression(convertedSt.exp)
+		return convertedSt
 	case *If_Statement:
-		typeCheckExpression(convertedSt.condition)
-		typeCheckStatement(convertedSt.thenSt)
+		convertedSt.condition = typeCheckExpression(convertedSt.condition)
+		convertedSt.thenSt = typeCheckStatement(convertedSt.thenSt, funcName)
 		if convertedSt.elseSt != nil {
-			typeCheckStatement(convertedSt.elseSt)
+			convertedSt.elseSt = typeCheckStatement(convertedSt.elseSt, funcName)
 		}
+		return convertedSt
 	case *Compound_Statement:
-		typeCheckBlock(convertedSt.block)
+		convertedSt.block = typeCheckBlock(convertedSt.block, funcName)
+		return convertedSt
 	case *While_Statement:
-		typeCheckExpression(convertedSt.condition)
-		typeCheckStatement(convertedSt.body)
+		convertedSt.condition = typeCheckExpression(convertedSt.condition)
+		convertedSt.body = typeCheckStatement(convertedSt.body, funcName)
+		return convertedSt
 	case *Do_While_Statement:
-		typeCheckStatement(convertedSt.body)
-		typeCheckExpression(convertedSt.condition)
+		convertedSt.body = typeCheckStatement(convertedSt.body, funcName)
+		convertedSt.condition = typeCheckExpression(convertedSt.condition)
+		return convertedSt
 	case *For_Statement:
-		typeCheckForInitial(convertedSt.initial)
+		convertedSt.initial = typeCheckForInitial(convertedSt.initial)
 		if convertedSt.condition != nil {
-			typeCheckExpression(convertedSt.condition)
+			convertedSt.condition = typeCheckExpression(convertedSt.condition)
 		}
 		if convertedSt.post != nil {
-			typeCheckExpression(convertedSt.post)
+			convertedSt.post = typeCheckExpression(convertedSt.post)
 		}
-		typeCheckStatement(convertedSt.body)
+		convertedSt.body = typeCheckStatement(convertedSt.body, funcName)
+		return convertedSt
 	}
+	return nil
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckForInitial(initial For_Initial_Clause) {
+func typeCheckForInitial(initial For_Initial_Clause) For_Initial_Clause {
 	switch convertedInit := initial.(type) {
 	case *For_Initial_Declaration:
 		if convertedInit.decl.storageClass != NONE_STORAGE_CLASS {
 			fail("For loop initializer can not have storage-class specifier")
 		}
-		typeCheckLocalVarDecl(convertedInit.decl)
+		convertedInit.decl = typeCheckLocalVarDecl(convertedInit.decl)
+		return convertedInit
 	case *For_Initial_Expression:
-		typeCheckExpression(convertedInit.exp)
+		convertedInit.exp = typeCheckExpression(convertedInit.exp)
+		return convertedInit
 	}
+	return nil
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func typeCheckExpression(exp Expression) {
+func typeCheckExpression(exp Expression) Expression {
 	switch convertedExp := exp.(type) {
+	case *Constant_Value_Expression:
+		return setResultType(convertedExp, convertedExp.typ)
 	case *Variable_Expression:
-		entry := symbolTable[convertedExp.name]
-		if entry.dataTyp.typ == FUNCTION_TYPE {
+		typ := symbolTable[convertedExp.name].dataTyp.typ
+		if typ == FUNCTION_TYPE {
 			fail("Function name", convertedExp.name, "used as variable")
 		}
+		return setResultType(convertedExp, typ)
+	case *Cast_Expression:
+		newInner := typeCheckExpression(convertedExp.innerExp)
+		newCast := Cast_Expression{targetType: convertedExp.targetType, innerExp: newInner}
+		return setResultType(&newCast, convertedExp.targetType)
 	case *Unary_Expression:
-		typeCheckExpression(convertedExp.innerExp)
+		newInner := typeCheckExpression(convertedExp.innerExp)
+		newUnary := Unary_Expression{unOp: convertedExp.unOp, innerExp: newInner}
+		if convertedExp.unOp == NOT_OPERATOR {
+			return setResultType(&newUnary, INT_TYPE)
+		} else {
+			return setResultType(&newUnary, getResultType(newInner))
+		}
 	case *Binary_Expression:
-		typeCheckExpression(convertedExp.firstExp)
-		typeCheckExpression(convertedExp.secExp)
+		newFirstExp := typeCheckExpression(convertedExp.firstExp)
+		newSecExp := typeCheckExpression(convertedExp.secExp)
+		if (convertedExp.binOp == AND_OPERATOR) || (convertedExp.binOp == OR_OPERATOR) {
+			newBinExp := Binary_Expression{binOp: convertedExp.binOp, firstExp: newFirstExp, secExp: newSecExp}
+			return setResultType(&newBinExp, INT_TYPE)
+		}
+		typ1 := getResultType(newFirstExp)
+		typ2 := getResultType(newSecExp)
+		commonTyp := getCommonType(typ1, typ2)
+		newFirstExp = convertToType(newFirstExp, commonTyp)
+		newSecExp = convertToType(newSecExp, commonTyp)
+		newBinExp := Binary_Expression{binOp: convertedExp.binOp, firstExp: newFirstExp, secExp: newSecExp}
+		if (convertedExp.binOp == ADD_OPERATOR) || (convertedExp.binOp == SUBTRACT_OPERATOR) || (convertedExp.binOp == MULTIPLY_OPERATOR) ||
+			(convertedExp.binOp == DIVIDE_OPERATOR) || (convertedExp.binOp == REMAINDER_OPERATOR) {
+			return setResultType(&newBinExp, commonTyp)
+		} else {
+			return setResultType(&newBinExp, INT_TYPE)
+		}
 	case *Assignment_Expression:
-		typeCheckExpression(convertedExp.lvalue)
-		typeCheckExpression(convertedExp.rightExp)
+		newLvalue := typeCheckExpression(convertedExp.lvalue)
+		newRightExp := typeCheckExpression(convertedExp.rightExp)
+		leftTyp := getResultType(newLvalue)
+		newRightExp = convertToType(newRightExp, leftTyp)
+		assignExp := Assignment_Expression{lvalue: newLvalue, rightExp: newRightExp}
+		return setResultType(&assignExp, leftTyp)
 	case *Conditional_Expression:
-		typeCheckExpression(convertedExp.condition)
-		typeCheckExpression(convertedExp.middleExp)
-		typeCheckExpression(convertedExp.rightExp)
+		newMiddle := typeCheckExpression(convertedExp.middleExp)
+		newRight := typeCheckExpression(convertedExp.rightExp)
+		middleTyp := getResultType(newMiddle)
+		rightTyp := getResultType(newRight)
+		commonTyp := getCommonType(middleTyp, rightTyp)
+		newMiddle = convertToType(newMiddle, commonTyp)
+		newRight = convertToType(newRight, commonTyp)
+		newCond := typeCheckExpression(convertedExp.condition)
+		newExp := Conditional_Expression{condition: newCond, middleExp: newMiddle, rightExp: newRight}
+		return setResultType(&newExp, commonTyp)
 	case *Function_Call_Expression:
-		existingSymbol := symbolTable[convertedExp.functionName]
-		// TODO: add return type to callType
-		callType := Data_Type{typ: FUNCTION_TYPE, paramCount: len(convertedExp.args)}
-		if !existingSymbol.dataTyp.isEqualType(callType) {
-			fail("Function call to", convertedExp.functionName, "does not match any known function declaration.")
-		}
-		for _, arg := range convertedExp.args {
-			typeCheckExpression(arg)
-		}
-	}
-}
+		existingSym, inTable := symbolTable[convertedExp.functionName]
 
-/////////////////////////////////////////////////////////////////////////////////
+		if !inTable {
+			fail("Calling a function that's not in the symbol table:", convertedExp.functionName)
+		}
+
+		existingTyp := existingSym.dataTyp
+		if existingTyp.typ != FUNCTION_TYPE {
+			fail("Variable used as function name:", convertedExp.functionName)
+		}
+
+		if len(existingTyp.paramTypes) != len(convertedExp.args) {
+			fail("Function called with the wrong number of arguments:", convertedExp.functionName)
+		}
+
+		newArgs := []Expression{}
+		for index, _ := range convertedExp.args {
+			newArg := typeCheckExpression(convertedExp.args[index])
+			newArg = convertToType(newArg, existingTyp.paramTypes[index].typ)
+			newArgs = append(newArgs, newArg)
+		}
+
+		callExp := Function_Call_Expression{functionName: convertedExp.functionName, args: newArgs}
+		return setResultType(&callExp, existingTyp.returnType.typ)
+	}
+
+	fail("Unknown Expression type in typeCheckExpression")
+	return nil
+}
