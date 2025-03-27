@@ -138,6 +138,7 @@ func doLinux() {
 		}
 	} else if produceExecutable {
 		// assembly and link using gcc
+		fmt.Println("running assembler and linker")
 		gccArgs := make([]string, len(allAssemblyFilenames))
 		copy(gccArgs, allAssemblyFilenames)
 		gccArgs = append(gccArgs, "-o")
@@ -153,7 +154,7 @@ func doLinux() {
 			fmt.Printf("additional info: %s\n", outBytes)
 			os.Exit(1)
 		}
-
+		fmt.Printf("additional info: %s\n", outBytes)
 		fmt.Println("executable created:", outputFilename)
 	}
 

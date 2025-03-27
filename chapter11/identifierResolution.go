@@ -124,7 +124,7 @@ func resolveLocalVariableDeclaration(decl Variable_Declaration, identifierMap ma
 			init = resolveExpression(decl.initializer, identifierMap)
 		}
 
-		return Variable_Declaration{name: uniqueName, initializer: init, storageClass: decl.storageClass}
+		return Variable_Declaration{name: uniqueName, initializer: init, dTyp: decl.dTyp, storageClass: decl.storageClass}
 	}
 }
 

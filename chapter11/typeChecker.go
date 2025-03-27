@@ -206,6 +206,7 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) Variable_Declaration {
 		decl.initializer = convertToType(decl.initializer, decl.dTyp.typ)
 		// TODO: if the constant value is a long that doesn't fit into an int (2147483650L) then
 		// strconv.ParseInt(value, 10, 64), then cast int64 to int32 (for example), then back to string
+		// I tested this and the assembler will truncate it for me.
 		initialValue = constValExp.value
 	} else if decl.initializer == nil {
 		if decl.storageClass == EXTERN_STORAGE_CLASS {
