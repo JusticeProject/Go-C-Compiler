@@ -334,6 +334,10 @@ func typeCheckBlockItem(bi Block_Item, funcName string) Block_Item {
 /////////////////////////////////////////////////////////////////////////////////
 
 func typeCheckStatement(st Statement, funcName string) Statement {
+	if st == nil {
+		return nil
+	}
+
 	switch convertedSt := st.(type) {
 	case *Return_Statement:
 		convertedSt.exp = typeCheckExpression(convertedSt.exp)
@@ -403,6 +407,10 @@ func typeCheckForInitial(initial For_Initial_Clause) For_Initial_Clause {
 /////////////////////////////////////////////////////////////////////////////////
 
 func typeCheckExpression(exp Expression) Expression {
+	if exp == nil {
+		return nil
+	}
+
 	switch convertedExp := exp.(type) {
 	case *Constant_Value_Expression:
 		return setResultType(convertedExp, convertedExp.typ)
