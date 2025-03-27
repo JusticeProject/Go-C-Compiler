@@ -353,6 +353,10 @@ func typeCheckStatement(st Statement, funcName string) Statement {
 	case *Compound_Statement:
 		convertedSt.block = typeCheckBlock(convertedSt.block, funcName)
 		return convertedSt
+	case *Break_Statement:
+		return st
+	case *Continue_Statement:
+		return st
 	case *While_Statement:
 		convertedSt.condition = typeCheckExpression(convertedSt.condition)
 		convertedSt.body = typeCheckStatement(convertedSt.body, funcName)
@@ -371,7 +375,11 @@ func typeCheckStatement(st Statement, funcName string) Statement {
 		}
 		convertedSt.body = typeCheckStatement(convertedSt.body, funcName)
 		return convertedSt
+	case *Null_Statement:
+		return st
 	}
+
+	fail("Unknown Statement type in typeCheckStatement")
 	return nil
 }
 
