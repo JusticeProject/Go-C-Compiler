@@ -6,9 +6,9 @@ type InitializerEnum int
 
 const (
 	NO_INITIALIZER InitializerEnum = iota
+	TENTATIVE_INIT
 	INITIAL_INT
 	INITIAL_LONG
-	TENTATIVE_INIT
 )
 
 func dataTypeEnumToInitEnum(input DataTypeEnum) InitializerEnum {
@@ -231,7 +231,9 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) Variable_Declaration {
 			fail("Conflicting variable linkage")
 		}
 
-		// TODO: update this when more types are available, and the else if below
+		// TODO: update this when more types are available, and the else if below.
+		// We don't want to initialize a variable twice because the two values could be conflicting,
+		// so if both decl's initialize then throw an error.
 		if (oldDecl.initEnum == INITIAL_INT) || (oldDecl.initEnum == INITIAL_LONG) {
 			if initEnum == oldDecl.initEnum {
 				fail("Conflicting file scope variable declarations")
@@ -293,6 +295,7 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) Variable_Declaration {
 			decl.initializer = setResultType(decl.initializer, decl.dTyp.typ)
 		}
 	}
+
 	return decl
 }
 

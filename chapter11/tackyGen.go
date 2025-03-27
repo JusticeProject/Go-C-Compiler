@@ -9,8 +9,6 @@ import "strconv"
 var tempVarCounter int64 = -1
 
 func makeTempVarName(prefix string) string {
-	// TODO: I could pass in the name of the function so the variables would be named something
-	// like main.0, main.1, addFunction.2, etc.
 	tempVarCounter++
 	if len(prefix) > 0 {
 		return prefix + "." + strconv.FormatInt(tempVarCounter, 10)
@@ -47,10 +45,10 @@ type Top_Level_Tacky interface {
 /////////////////////////////////////////////////////////////////////////////////
 
 type Function_Definition_Tacky struct {
-	name   string
-	global bool
-	params []string
-	body   []Instruction_Tacky
+	name       string
+	global     bool
+	paramNames []string
+	body       []Instruction_Tacky
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -59,6 +57,7 @@ type Static_Variable_Tacky struct {
 	name         string
 	global       bool
 	initialValue string
+	initEnum     InitializerEnum
 }
 
 //###############################################################################
@@ -73,6 +72,20 @@ type Instruction_Tacky interface {
 
 type Return_Instruction_Tacky struct {
 	val Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Sign_Extend_Instruction_Tacky struct {
+	src Value_Tacky
+	dst Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Truncate_Instruction_Tacky struct {
+	src Value_Tacky
+	dst Value_Tacky
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -143,8 +156,8 @@ type Value_Tacky interface {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-// TODO: could switch this to using enums for the data type and a string to hold the actual value
 type Constant_Value_Tacky struct {
+	typ   DataTypeEnum
 	value string
 }
 
@@ -152,6 +165,12 @@ type Constant_Value_Tacky struct {
 
 type Variable_Value_Tacky struct {
 	name string
+}
+
+func makeTackyVariable(typ DataTypeEnum) Variable_Value_Tacky {
+	varName := makeTempVarName("")
+	symbolTable[varName] = Symbol{dataTyp: Data_Type{typ: typ}, attrs: LOCAL_ATTRIBUTES}
+	return Variable_Value_Tacky{varName}
 }
 
 //###############################################################################
@@ -180,7 +199,7 @@ func (pr *Program) genTacky() Program_Tacky {
 			// function definitions will have at least one instruction, function declarations won't have any instructions,
 			// we will only keep the function definitions
 			global := symbolTable[fnDecl.name].global
-			tacFunc := Function_Definition_Tacky{name: fnDecl.name, global: global, params: fnDecl.params, body: instrs}
+			tacFunc := Function_Definition_Tacky{name: fnDecl.name, global: global, paramNames: fnDecl.paramNames, body: instrs}
 			topItems = append(topItems, &tacFunc)
 		}
 	}
@@ -203,15 +222,17 @@ func convertSymbolsToTacky() []Top_Level_Tacky {
 	for name, sym := range symbolTable {
 		switch sym.attrs {
 		case STATIC_ATTRIBUTES:
-			switch sym.initializer {
-			case INITIAL_INT:
-				v := Static_Variable_Tacky{name: name, global: sym.global, initialValue: sym.initialValue}
-				topItems = append(topItems, &v)
+			switch sym.initEnum {
+			case NO_INITIALIZER:
+				continue
 			case TENTATIVE_INIT:
-				v := Static_Variable_Tacky{name: name, global: sym.global, initialValue: "0"}
+				v := Static_Variable_Tacky{name: name, global: sym.global, initialValue: "0",
+					initEnum: dataTypeEnumToInitEnum(sym.dataTyp.typ)}
 				topItems = append(topItems, &v)
 			default:
-				continue
+				// it has an initializer with an int, long, float, etc.
+				v := Static_Variable_Tacky{name: name, global: sym.global, initialValue: sym.initialValue, initEnum: sym.initEnum}
+				topItems = append(topItems, &v)
 			}
 		default:
 			continue
@@ -256,7 +277,7 @@ func (fn *Function_Declaration) declToTacky() []Instruction_Tacky {
 
 	// Add a return statement to the end of every function just in case the original source didn't have one.
 	// If it already had a return statement then no big deal becuase this new ret instruction will never run.
-	ret := Return_Instruction_Tacky{&Constant_Value_Tacky{"0"}}
+	ret := Return_Instruction_Tacky{&Constant_Value_Tacky{typ: INT_TYPE, value: "0"}}
 	bodyTac = append(bodyTac, &ret)
 
 	return bodyTac
@@ -480,8 +501,8 @@ func (st *Null_Statement) statementToTacky() []Instruction_Tacky {
 //###############################################################################
 //###############################################################################
 
-func (exp *Constant_Int_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	val := Constant_Value_Tacky{value: exp.intValue}
+func (exp *Constant_Value_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+	val := Constant_Value_Tacky{typ: exp.typ, value: exp.value}
 	return &val, instructions
 }
 
@@ -493,11 +514,30 @@ func (exp *Variable_Expression) expToTacky(instructions []Instruction_Tacky) (Va
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (exp *Cast_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+	result, instructions := exp.innerExp.expToTacky(instructions)
+	if exp.targetType == getResultType(exp.innerExp) {
+		return result, instructions
+	}
+
+	dst := makeTackyVariable(exp.targetType)
+	// TODO: update as we add more data types
+	if exp.targetType == LONG_TYPE {
+		newInstr := Sign_Extend_Instruction_Tacky{src: result, dst: &dst}
+		instructions = append(instructions, &newInstr)
+	} else {
+		newInstr := Truncate_Instruction_Tacky{src: result, dst: &dst}
+		instructions = append(instructions, &newInstr)
+	}
+
+	return &dst, instructions
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (exp *Unary_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
 	src, instructions := exp.innerExp.expToTacky(instructions)
-	dstName := makeTempVarName("")
-	dst := Variable_Value_Tacky{name: dstName}
-	// TODO: will I need a helper function to convert the Unary Operator type to its TACKY equivalent?
+	dst := makeTackyVariable(getResultType(exp))
 	instr := Unary_Instruction_Tacky{unOp: exp.unOp, src: src, dst: &dst}
 	instructions = append(instructions, &instr)
 	return &dst, instructions
@@ -515,15 +555,15 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		v2, instructions := exp.secExp.expToTacky(instructions)
 		j2 := Jump_If_Zero_Instruction_Tacky{condition: v2, target: false_label}
 		instructions = append(instructions, &j2)
-		result := Variable_Value_Tacky{makeTempVarName("")}
-		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{"1"}, dst: &result}
+		result := makeTackyVariable(getResultType(exp))
+		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{typ: INT_TYPE, value: "1"}, dst: &result}
 		instructions = append(instructions, &cp1)
 		end := makeLabelName("end")
 		j3 := Jump_Instruction_Tacky{end}
 		instructions = append(instructions, &j3)
 		lb1 := Label_Instruction_Tacky{false_label}
 		instructions = append(instructions, &lb1)
-		cp2 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{"0"}, dst: &result}
+		cp2 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{typ: INT_TYPE, value: "0"}, dst: &result}
 		instructions = append(instructions, &cp2)
 		lb2 := Label_Instruction_Tacky{end}
 		instructions = append(instructions, &lb2)
@@ -536,15 +576,15 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		v2, instructions := exp.secExp.expToTacky(instructions)
 		j2 := Jump_If_Not_Zero_Instruction_Tacky{condition: v2, target: true_label}
 		instructions = append(instructions, &j2)
-		result := Variable_Value_Tacky{makeTempVarName("")}
-		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{"0"}, dst: &result}
+		result := makeTackyVariable(getResultType(exp))
+		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{typ: INT_TYPE, value: "0"}, dst: &result}
 		instructions = append(instructions, &cp1)
 		end := makeLabelName("end")
 		j3 := Jump_Instruction_Tacky{end}
 		instructions = append(instructions, &j3)
 		lb1 := Label_Instruction_Tacky{true_label}
 		instructions = append(instructions, &lb1)
-		cp2 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{"1"}, dst: &result}
+		cp2 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{typ: INT_TYPE, value: "1"}, dst: &result}
 		instructions = append(instructions, &cp2)
 		lb2 := Label_Instruction_Tacky{end}
 		instructions = append(instructions, &lb2)
@@ -552,8 +592,7 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 	} else {
 		src1, instructions := exp.firstExp.expToTacky(instructions)
 		src2, instructions := exp.secExp.expToTacky(instructions)
-		dstName := makeTempVarName("")
-		dst := Variable_Value_Tacky{dstName}
+		dst := makeTackyVariable(getResultType(exp))
 		instr := Binary_Instruction_Tacky{binOp: exp.binOp, src1: src1, src2: src2, dst: &dst}
 		instructions = append(instructions, &instr)
 		return &dst, instructions
@@ -584,7 +623,7 @@ func (exp *Conditional_Expression) expToTacky(instructions []Instruction_Tacky) 
 	jmp := Jump_If_Zero_Instruction_Tacky{c, rightLabel}
 	instructions = append(instructions, &jmp)
 	v1, instructions := exp.middleExp.expToTacky(instructions)
-	result := Variable_Value_Tacky{makeTempVarName("")}
+	result := makeTackyVariable(getResultType(exp))
 	cp1 := Copy_Instruction_Tacky{v1, &result}
 	instructions = append(instructions, &cp1)
 	endLabel := makeLabelName("end")
@@ -611,7 +650,7 @@ func (e *Function_Call_Expression) expToTacky(instructions []Instruction_Tacky) 
 		argsTacky = append(argsTacky, argTac)
 	}
 
-	retVal := Variable_Value_Tacky{makeTempVarName("")}
+	retVal := makeTackyVariable(getResultType(e))
 	fn := Function_Call_Tacky{funcName: e.functionName, args: argsTacky, returnVal: &retVal}
 	instructions = append(instructions, &fn)
 
