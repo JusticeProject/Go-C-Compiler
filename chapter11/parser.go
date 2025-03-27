@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -918,7 +919,7 @@ func parseConstantValue(tokens []Token) (string, DataTypeEnum, []Token) {
 			fail("Could not parse integer:", err.Error())
 		}
 
-		if (dataTyp == INT_TYPE) && (integer > 2^31-1) {
+		if (dataTyp == INT_TYPE) && (integer > math.MaxInt32) {
 			dataTyp = LONG_TYPE
 		}
 	}
