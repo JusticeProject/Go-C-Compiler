@@ -1,8 +1,10 @@
-long sum(long a, long b) {
-    return a + b;
-}
+long sum(long a, long b);
 
 int main(void) {
-    result = sum(9999999999999999, (long)2);
+    long result = sum(9L, (long)2);
     return result;
+}
+
+long sum(long a, long b) {
+    return a + b;
 }
