@@ -65,6 +65,7 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 		file.WriteString("\t" + ".data" + "\n")
 		file.WriteString("\t" + ".align 4" + "\n")
 		file.WriteString(st.name + ":\n")
+		// TODO:
 		file.WriteString("\t" + ".long " + st.initialValue + "\n")
 	}
 }
@@ -75,6 +76,12 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 
 func (instr *Mov_Instruction_Asm) instrEmitAsm(file *os.File) {
 	file.WriteString("\t" + "movl" + "\t" + instr.src.getOperandString(4) + ", " + instr.dst.getOperandString(4) + "\n")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (instr *Movsx_Instruction_Asm) instrEmitAsm(file *os.File) {
+	// TODO:
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -134,15 +141,16 @@ func (instr *Label_Instruction_Asm) instrEmitAsm(file *os.File) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (instr *Allocate_Stack_Instruction_Asm) instrEmitAsm(file *os.File) {
+// TODO:
+/*func (instr *Allocate_Stack_Instruction_Asm) instrEmitAsm(file *os.File) {
 	file.WriteString("\t" + "subq" + "\t" + instr.stackSize.getOperandString(4) + ", %rsp" + "\n")
-}
+}*/
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (instr *Deallocate_Stack_Instruction_Asm) instrEmitAsm(file *os.File) {
+/*func (instr *Deallocate_Stack_Instruction_Asm) instrEmitAsm(file *os.File) {
 	file.WriteString("\t" + "addq" + "\t" + instr.stackSize.getOperandString(4) + ", %rsp" + "\n")
-}
+}*/
 
 /////////////////////////////////////////////////////////////////////////////////
 
@@ -154,7 +162,7 @@ func (instr *Push_Instruction_Asm) instrEmitAsm(file *os.File) {
 
 func (instr *Call_Function_Asm) instrEmitAsm(file *os.File) {
 	// need to find if the function we are calling is in the current binary object file or somewhere else
-	entry, inTable := symbolTable[instr.name]
+	entry, inTable := symbolTableBackend[instr.name]
 	if inTable && entry.defined {
 		// It must be in the table and have a definition to use this calling method. If it's in the table
 		// but not defined then it's just a function declaration so the definition is elsewhere.
@@ -300,6 +308,7 @@ func getRegisterString(reg RegisterTypeAsm, sizeBytes int) string {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+// TODO: can I replace sizeBytes with AssemblySizeEnum?
 func getRegisterPrefix(sizeBytes int) string {
 	switch sizeBytes {
 	case 8:

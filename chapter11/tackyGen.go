@@ -152,6 +152,7 @@ type Function_Call_Tacky struct {
 
 type Value_Tacky interface {
 	valueToAsm() Operand_Asm
+	getAssemblyType() AssemblyTypeEnum
 }
 
 /////////////////////////////////////////////////////////////////////////////////
