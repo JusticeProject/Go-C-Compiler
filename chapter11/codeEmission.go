@@ -56,17 +56,24 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 		file.WriteString("\t" + ".globl " + st.name + "\n")
 	}
 
+	alignStr := strconv.FormatInt(int64(st.alignment), 10)
+	typStr := ""
+	if st.initEnum == INITIAL_INT {
+		typStr = ".long "
+	} else if st.initEnum == INITIAL_LONG {
+		typStr = ".quad "
+	}
+
 	if st.initialValue == "0" {
 		file.WriteString("\t" + ".bss" + "\n")
-		file.WriteString("\t" + ".align 4" + "\n")
+		file.WriteString("\t" + ".align " + alignStr + "\n")
 		file.WriteString(st.name + ":\n")
-		file.WriteString("\t" + ".zero 4" + "\n")
+		file.WriteString("\t" + ".zero " + alignStr + "\n")
 	} else {
 		file.WriteString("\t" + ".data" + "\n")
-		file.WriteString("\t" + ".align 4" + "\n")
+		file.WriteString("\t" + ".align " + alignStr + "\n")
 		file.WriteString(st.name + ":\n")
-		// TODO:
-		file.WriteString("\t" + ".long " + st.initialValue + "\n")
+		file.WriteString("\t" + typStr + st.initialValue + "\n")
 	}
 }
 
@@ -75,44 +82,52 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 //###############################################################################
 
 func (instr *Mov_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "movl" + "\t" + instr.src.getOperandString(4) + ", " + instr.dst.getOperandString(4) + "\n")
+	file.WriteString("\t" + "mov" + getInstructionSuffix(instr.asmTyp) + "\t" +
+		instr.src.getOperandString(instr.asmTyp) + ", " + instr.dst.getOperandString(instr.asmTyp) + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Movsx_Instruction_Asm) instrEmitAsm(file *os.File) {
-	// TODO:
+	file.WriteString("\t" + "movslq" + "\t" + instr.src.getOperandString(LONGWORD_ASM_TYPE) + ", " +
+		instr.dst.getOperandString(QUADWORD_ASM_TYPE) + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Unary_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + getUnaryOperatorString(instr.unOp) + "\t" + instr.src.getOperandString(4) + "\n")
+	file.WriteString("\t" + getUnaryOperatorString(instr.unOp) + getInstructionSuffix(instr.asmTyp) + "\t" +
+		instr.src.getOperandString(instr.asmTyp) + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Binary_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + getBinaryOperatorString(instr.binOp) + "\t" + instr.src.getOperandString(4) + ", " +
-		instr.dst.getOperandString(4) + "\n")
+	file.WriteString("\t" + getBinaryOperatorString(instr.binOp) + getInstructionSuffix(instr.asmTyp) + "\t" +
+		instr.src.getOperandString(instr.asmTyp) + ", " + instr.dst.getOperandString(instr.asmTyp) + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Compare_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "cmpl" + "\t" + instr.op1.getOperandString(4) + ", " + instr.op2.getOperandString(4) + "\n")
+	file.WriteString("\t" + "cmp" + getInstructionSuffix(instr.asmTyp) + "\t" +
+		instr.op1.getOperandString(instr.asmTyp) + ", " + instr.op2.getOperandString(instr.asmTyp) + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *IDivide_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "idivl" + "\t" + instr.divisor.getOperandString(4) + "\n")
+	file.WriteString("\t" + "idiv" + getInstructionSuffix(instr.asmTyp) + "\t" + instr.divisor.getOperandString(instr.asmTyp) + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *CDQ_Sign_Extend_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "cdq" + "\n")
+	if instr.asmTyp == QUADWORD_ASM_TYPE {
+		file.WriteString("\t" + "cqo" + "\n")
+	} else {
+		file.WriteString("\t" + "cdq" + "\n")
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -130,7 +145,7 @@ func (instr *Jump_Conditional_Instruction_Asm) instrEmitAsm(file *os.File) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Set_Conditional_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "set" + getConditionalCodeString(instr.code) + "\t" + instr.dst.getOperandString(1) + "\n")
+	file.WriteString("\t" + "set" + getConditionalCodeString(instr.code) + "\t" + instr.dst.getOperandString(BYTE_ASM_TYPE) + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -141,21 +156,8 @@ func (instr *Label_Instruction_Asm) instrEmitAsm(file *os.File) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-// TODO:
-/*func (instr *Allocate_Stack_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "subq" + "\t" + instr.stackSize.getOperandString(4) + ", %rsp" + "\n")
-}*/
-
-/////////////////////////////////////////////////////////////////////////////////
-
-/*func (instr *Deallocate_Stack_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "addq" + "\t" + instr.stackSize.getOperandString(4) + ", %rsp" + "\n")
-}*/
-
-/////////////////////////////////////////////////////////////////////////////////
-
 func (instr *Push_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "pushq" + "\t" + instr.op.getOperandString(8) + "\n")
+	file.WriteString("\t" + "pushq" + "\t" + instr.op.getOperandString(QUADWORD_ASM_TYPE) + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -188,9 +190,9 @@ func (instr *Ret_Instruction_Asm) instrEmitAsm(file *os.File) {
 func getUnaryOperatorString(unOp UnaryOperatorTypeAsm) string {
 	switch unOp {
 	case NEGATE_OPERATOR_ASM:
-		return "negl"
+		return "neg"
 	case NOT_OPERATOR_ASM:
-		return "notl"
+		return "not"
 	default:
 		fail("unknown unary operator")
 	}
@@ -205,11 +207,11 @@ func getUnaryOperatorString(unOp UnaryOperatorTypeAsm) string {
 func getBinaryOperatorString(binOp BinaryOperatorTypeAsm) string {
 	switch binOp {
 	case ADD_OPERATOR_ASM:
-		return "addl"
+		return "add"
 	case SUB_OPERATOR_ASM:
-		return "subl"
+		return "sub"
 	case MULT_OPERATOR_ASM:
-		return "imull"
+		return "imul"
 	default:
 		fail("unknown binary operator")
 	}
@@ -221,32 +223,32 @@ func getBinaryOperatorString(binOp BinaryOperatorTypeAsm) string {
 //###############################################################################
 //###############################################################################
 
-func (op *Immediate_Int_Operand_Asm) getOperandString(sizeBytes int) string {
+func (op *Immediate_Int_Operand_Asm) getOperandString(asmTyp AssemblyTypeEnum) string {
 	return "$" + op.value
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (op *Register_Operand_Asm) getOperandString(sizeBytes int) string {
-	return "%" + getRegisterString(op.reg, sizeBytes)
+func (op *Register_Operand_Asm) getOperandString(asmTyp AssemblyTypeEnum) string {
+	return "%" + getRegisterString(op.reg, asmTyp)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (op *Pseudoregister_Operand_Asm) getOperandString(sizeBytes int) string {
+func (op *Pseudoregister_Operand_Asm) getOperandString(asmTyp AssemblyTypeEnum) string {
 	fail("cannot emit pseudoregister")
 	return ""
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (op *Stack_Operand_Asm) getOperandString(sizeBytes int) string {
+func (op *Stack_Operand_Asm) getOperandString(asmTyp AssemblyTypeEnum) string {
 	return strconv.FormatInt(int64(op.value), 10) + "(%rbp)"
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (op *Data_Operand_Asm) getOperandString(sizeBytes int) string {
+func (op *Data_Operand_Asm) getOperandString(asmTyp AssemblyTypeEnum) string {
 	return op.name + "(%rip)"
 }
 
@@ -279,26 +281,42 @@ func getConditionalCodeString(code ConditionalCodeAsm) string {
 //###############################################################################
 //###############################################################################
 
-func getRegisterString(reg RegisterTypeAsm, sizeBytes int) string {
+func getInstructionSuffix(asmTyp AssemblyTypeEnum) string {
+	switch asmTyp {
+	case QUADWORD_ASM_TYPE:
+		return "q"
+	case LONGWORD_ASM_TYPE:
+		return "l"
+	default:
+		fail("unknown AssemblyTypeEnum")
+	}
+	return ""
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func getRegisterString(reg RegisterTypeAsm, asmTyp AssemblyTypeEnum) string {
 	switch reg {
 	case AX_REGISTER_ASM:
-		return getRegisterPrefix(sizeBytes) + "a" + getXRegisterSuffix(sizeBytes)
+		return getRegisterPrefix(asmTyp) + "a" + getXRegisterSuffix(asmTyp)
 	case CX_REGISTER_ASM:
-		return getRegisterPrefix(sizeBytes) + "c" + getXRegisterSuffix(sizeBytes)
+		return getRegisterPrefix(asmTyp) + "c" + getXRegisterSuffix(asmTyp)
 	case DX_REGISTER_ASM:
-		return getRegisterPrefix(sizeBytes) + "d" + getXRegisterSuffix(sizeBytes)
+		return getRegisterPrefix(asmTyp) + "d" + getXRegisterSuffix(asmTyp)
 	case DI_REGISTER_ASM:
-		return getRegisterPrefix(sizeBytes) + "di" + getIRegisterSuffix(sizeBytes)
+		return getRegisterPrefix(asmTyp) + "di" + getIRegisterSuffix(asmTyp)
 	case SI_REGISTER_ASM:
-		return getRegisterPrefix(sizeBytes) + "si" + getIRegisterSuffix(sizeBytes)
+		return getRegisterPrefix(asmTyp) + "si" + getIRegisterSuffix(asmTyp)
 	case R8_REGISTER_ASM:
-		return "r8" + getScratchRegisterSuffix(sizeBytes)
+		return "r8" + getScratchRegisterSuffix(asmTyp)
 	case R9_REGISTER_ASM:
-		return "r9" + getScratchRegisterSuffix(sizeBytes)
+		return "r9" + getScratchRegisterSuffix(asmTyp)
 	case R10_REGISTER_ASM:
-		return "r10" + getScratchRegisterSuffix(sizeBytes)
+		return "r10" + getScratchRegisterSuffix(asmTyp)
 	case R11_REGISTER_ASM:
-		return "r11" + getScratchRegisterSuffix(sizeBytes)
+		return "r11" + getScratchRegisterSuffix(asmTyp)
+	case SP_REGISTER_ASM:
+		return "rsp"
 	default:
 		fail("unknown register")
 	}
@@ -308,12 +326,11 @@ func getRegisterString(reg RegisterTypeAsm, sizeBytes int) string {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-// TODO: can I replace sizeBytes with AssemblySizeEnum?
-func getRegisterPrefix(sizeBytes int) string {
-	switch sizeBytes {
-	case 8:
+func getRegisterPrefix(asmTyp AssemblyTypeEnum) string {
+	switch asmTyp {
+	case QUADWORD_ASM_TYPE:
 		return "r"
-	case 4:
+	case LONGWORD_ASM_TYPE:
 		return "e"
 	default:
 		return ""
@@ -322,9 +339,9 @@ func getRegisterPrefix(sizeBytes int) string {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func getXRegisterSuffix(sizeBytes int) string {
-	switch sizeBytes {
-	case 1:
+func getXRegisterSuffix(asmTyp AssemblyTypeEnum) string {
+	switch asmTyp {
+	case BYTE_ASM_TYPE:
 		return "l"
 	default:
 		return "x"
@@ -333,9 +350,9 @@ func getXRegisterSuffix(sizeBytes int) string {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func getIRegisterSuffix(sizeBytes int) string {
-	switch sizeBytes {
-	case 1:
+func getIRegisterSuffix(asmTyp AssemblyTypeEnum) string {
+	switch asmTyp {
+	case BYTE_ASM_TYPE:
 		return "l"
 	default:
 		return ""
@@ -344,11 +361,11 @@ func getIRegisterSuffix(sizeBytes int) string {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func getScratchRegisterSuffix(sizeBytes int) string {
-	switch sizeBytes {
-	case 8:
+func getScratchRegisterSuffix(asmTyp AssemblyTypeEnum) string {
+	switch asmTyp {
+	case QUADWORD_ASM_TYPE:
 		return ""
-	case 4:
+	case LONGWORD_ASM_TYPE:
 		return "d"
 	default:
 		return "b"

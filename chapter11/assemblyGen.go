@@ -30,6 +30,7 @@ type AssemblyTypeEnum int
 
 const (
 	NONE_ASM_TYPE AssemblyTypeEnum = iota
+	BYTE_ASM_TYPE
 	LONGWORD_ASM_TYPE
 	QUADWORD_ASM_TYPE
 )
@@ -287,7 +288,7 @@ func convertBinaryOpToAsm(binOp BinaryOperatorType) BinaryOperatorTypeAsm {
 //###############################################################################
 
 type Operand_Asm interface {
-	getOperandString(sizeBytes int) string
+	getOperandString(asmTyp AssemblyTypeEnum) string
 }
 
 func opIsBigImm(op Operand_Asm) bool {
@@ -933,7 +934,9 @@ func (instr *Binary_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 			firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.src, dst: &intermediateOperand}
 			secondInstr := Binary_Instruction_Asm{binOp: instr.binOp, asmTyp: instr.asmTyp, src: &intermediateOperand, dst: instr.dst}
 			return []Instruction_Asm{&firstInstr, &secondInstr}
-		}
+		} /*else if isQuadInstr {
+
+		}*/
 	} else if instr.binOp == MULT_OPERATOR_ASM {
 		_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
 		_, dstIsStatic := instr.dst.(*Data_Operand_Asm)
