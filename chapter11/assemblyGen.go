@@ -928,29 +928,33 @@ func (instr *Binary_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 		_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
 		_, srcIsStatic := instr.src.(*Data_Operand_Asm)
 		_, dstIsStatic := instr.dst.(*Data_Operand_Asm)
-		// TODO: page 268 of the book
-		//srcIsBigImm := opIsBigImm(instr.src)
-		//dstIsBigImm := opIsBigImm(instr.dst)
-		//isQuadInstr := instr.asmTyp == QUADWORD_ASM_TYPE
+		srcIsBigImm := opIsBigImm(instr.src)
+		isQuadInstr := instr.asmTyp == QUADWORD_ASM_TYPE
 
-		if (srcIsStack || srcIsStatic) && (dstIsStack || dstIsStatic) {
+		// page 268 of the book, binary instructions can't use large immediate values, so put them in a register first
+		if ((srcIsStack || srcIsStatic) && (dstIsStack || dstIsStatic)) || (isQuadInstr && srcIsBigImm) {
 			intermediateOperand := Register_Operand_Asm{R10_REGISTER_ASM}
 			firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.src, dst: &intermediateOperand}
 			secondInstr := Binary_Instruction_Asm{binOp: instr.binOp, asmTyp: instr.asmTyp, src: &intermediateOperand, dst: instr.dst}
 			return []Instruction_Asm{&firstInstr, &secondInstr}
-		} /*else if isQuadInstr && srcIsBigImm {
-
-		}*/
+		}
 	} else if instr.binOp == MULT_OPERATOR_ASM {
 		_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
 		_, dstIsStatic := instr.dst.(*Data_Operand_Asm)
-		// TODO: page 268 of the book
+		srcIsBigImm := opIsBigImm(instr.src)
+		isQuadInstr := instr.asmTyp == QUADWORD_ASM_TYPE
 
-		if dstIsStack || dstIsStatic {
-			firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.dst, dst: &Register_Operand_Asm{R11_REGISTER_ASM}}
-			secondInstr := Binary_Instruction_Asm{binOp: instr.binOp, asmTyp: instr.asmTyp, src: instr.src, dst: &Register_Operand_Asm{R11_REGISTER_ASM}}
-			thirdInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: &Register_Operand_Asm{R11_REGISTER_ASM}, dst: instr.dst}
-			return []Instruction_Asm{&firstInstr, &secondInstr, &thirdInstr}
+		// Moving the original dst to r11 is only when the dst is memory which imul does not allow.
+		// Moving the original src to r10 is only when the src is a large immediate value, which imul does not allow (page 268 of book).
+		// It's not very optimized to do both changes when only one is necessary, but this simplifies the logic here.
+		if dstIsStack || dstIsStatic || (isQuadInstr && srcIsBigImm) {
+			r10 := Register_Operand_Asm{R10_REGISTER_ASM}
+			r11 := Register_Operand_Asm{R11_REGISTER_ASM}
+			firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.src, dst: &r10}
+			secInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.dst, dst: &r11}
+			thirdInstr := Binary_Instruction_Asm{binOp: instr.binOp, asmTyp: instr.asmTyp, src: &r10, dst: &r11}
+			fourthInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: &r11, dst: instr.dst}
+			return []Instruction_Asm{&firstInstr, &secInstr, &thirdInstr, &fourthInstr}
 		}
 	}
 
@@ -980,17 +984,26 @@ func (instr *Compare_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 	_, op2IsStatic := instr.op2.(*Data_Operand_Asm)
 	_, op2IsConstant := instr.op2.(*Immediate_Int_Operand_Asm)
 	op1IsBigImm := opIsBigImm(instr.op1)
+	op2IsBimImm := opIsBigImm(instr.op2)
 	isQuadInstr := instr.asmTyp == QUADWORD_ASM_TYPE
-	// TODO: page 268, what if both operands are large immediates?
 
-	if ((op1IsStack || op1IsStatic) && (op2IsStack || op2IsStatic)) || (isQuadInstr && op1IsBigImm) {
-		intermediateOperand := Register_Operand_Asm{R10_REGISTER_ASM}
-		firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.op1, dst: &intermediateOperand}
-		secondInstr := Compare_Instruction_Asm{asmTyp: instr.asmTyp, op1: &intermediateOperand, op2: instr.op2}
+	// page 268 of the book, can't use immediate values that are too big
+	if isQuadInstr && (op1IsBigImm || op2IsBimImm) {
+		r10 := Register_Operand_Asm{R10_REGISTER_ASM}
+		r11 := Register_Operand_Asm{R11_REGISTER_ASM}
+		firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.op1, dst: &r10}
+		secInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.op2, dst: &r11}
+		thirdInstr := Compare_Instruction_Asm{asmTyp: instr.asmTyp, op1: &r10, op2: &r11}
+		return []Instruction_Asm{&firstInstr, &secInstr, &thirdInstr}
+	} else if (op1IsStack || op1IsStatic) && (op2IsStack || op2IsStatic) {
+		r10 := Register_Operand_Asm{R10_REGISTER_ASM}
+		firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.op1, dst: &r10}
+		secondInstr := Compare_Instruction_Asm{asmTyp: instr.asmTyp, op1: &r10, op2: instr.op2}
 		return []Instruction_Asm{&firstInstr, &secondInstr}
 	} else if op2IsConstant {
-		firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.op2, dst: &Register_Operand_Asm{R11_REGISTER_ASM}}
-		secondInstr := Compare_Instruction_Asm{asmTyp: instr.asmTyp, op1: instr.op1, op2: &Register_Operand_Asm{R11_REGISTER_ASM}}
+		r11 := Register_Operand_Asm{R11_REGISTER_ASM}
+		firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.op2, dst: &r11}
+		secondInstr := Compare_Instruction_Asm{asmTyp: instr.asmTyp, op1: instr.op1, op2: &r11}
 		return []Instruction_Asm{&firstInstr, &secondInstr}
 	}
 
@@ -1000,6 +1013,12 @@ func (instr *Compare_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Push_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
-	// TODO: page 268 of the book
+	// page 268 of the book, can't push immediate values that are too big, need to put the values in a register first
+	if opIsBigImm(instr.op) {
+		r10 := Register_Operand_Asm{R10_REGISTER_ASM}
+		firstInstr := Mov_Instruction_Asm{asmTyp: QUADWORD_ASM_TYPE, src: instr.op, dst: &r10}
+		secInstr := Push_Instruction_Asm{&r10}
+		return []Instruction_Asm{&firstInstr, &secInstr}
+	}
 	return []Instruction_Asm{instr}
 }
