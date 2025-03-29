@@ -877,9 +877,11 @@ func (instr *Mov_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 	_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
 	_, srcIsStatic := instr.src.(*Data_Operand_Asm)
 	_, dstIsStatic := instr.dst.(*Data_Operand_Asm)
-	// TODO: page 268 of the book??
+	srcIsBigImm := opIsBigImm(instr.src)
+	isQuadInstr := instr.asmTyp == QUADWORD_ASM_TYPE
 
-	if (srcIsStack || srcIsStatic) && (dstIsStack || dstIsStatic) {
+	// from page 268 of the book, large Quadwords can't go directly to the stack (memory)
+	if ((srcIsStack || srcIsStatic) && (dstIsStack || dstIsStatic)) || (isQuadInstr && srcIsBigImm && dstIsStack) {
 		intermediateOperand := Register_Operand_Asm{R10_REGISTER_ASM}
 		firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.src, dst: &intermediateOperand}
 		secondInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: &intermediateOperand, dst: instr.dst}
@@ -934,7 +936,7 @@ func (instr *Binary_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 			firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.src, dst: &intermediateOperand}
 			secondInstr := Binary_Instruction_Asm{binOp: instr.binOp, asmTyp: instr.asmTyp, src: &intermediateOperand, dst: instr.dst}
 			return []Instruction_Asm{&firstInstr, &secondInstr}
-		} /*else if isQuadInstr {
+		} /*else if isQuadInstr && srcIsBigImm {
 
 		}*/
 	} else if instr.binOp == MULT_OPERATOR_ASM {
