@@ -881,7 +881,9 @@ func (instr *Mov_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 	isQuadInstr := instr.asmTyp == QUADWORD_ASM_TYPE
 
 	// from page 268 of the book, large Quadwords can't go directly to the stack (memory)
-	if ((srcIsStack || srcIsStatic) && (dstIsStack || dstIsStatic)) || (isQuadInstr && srcIsBigImm && dstIsStack) {
+	if ((srcIsStack || srcIsStatic) && (dstIsStack || dstIsStatic)) ||
+		(isQuadInstr && srcIsBigImm && dstIsStack) ||
+		(isQuadInstr && srcIsBigImm && dstIsStatic) {
 		intermediateOperand := Register_Operand_Asm{R10_REGISTER_ASM}
 		firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.src, dst: &intermediateOperand}
 		secondInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: &intermediateOperand, dst: instr.dst}
@@ -977,9 +979,11 @@ func (instr *Compare_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 	_, op1IsStatic := instr.op1.(*Data_Operand_Asm)
 	_, op2IsStatic := instr.op2.(*Data_Operand_Asm)
 	_, op2IsConstant := instr.op2.(*Immediate_Int_Operand_Asm)
-	// TODO: page 268 of the book
+	op1IsBigImm := opIsBigImm(instr.op1)
+	isQuadInstr := instr.asmTyp == QUADWORD_ASM_TYPE
+	// TODO: page 268, what if both operands are large immediates?
 
-	if (op1IsStack || op1IsStatic) && (op2IsStack || op2IsStatic) {
+	if ((op1IsStack || op1IsStatic) && (op2IsStack || op2IsStatic)) || (isQuadInstr && op1IsBigImm) {
 		intermediateOperand := Register_Operand_Asm{R10_REGISTER_ASM}
 		firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.op1, dst: &intermediateOperand}
 		secondInstr := Compare_Instruction_Asm{asmTyp: instr.asmTyp, op1: &intermediateOperand, op2: instr.op2}
