@@ -292,7 +292,7 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) Variable_Declaration {
 		symbolTable[decl.name] = Symbol{dataTyp: decl.dTyp, attrs: LOCAL_ATTRIBUTES}
 		if decl.initializer != nil {
 			decl.initializer = typeCheckExpression(decl.initializer)
-			decl.initializer = setResultType(decl.initializer, decl.dTyp.typ)
+			decl.initializer = convertToType(decl.initializer, decl.dTyp.typ)
 		}
 	}
 
