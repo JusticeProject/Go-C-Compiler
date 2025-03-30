@@ -90,6 +90,13 @@ type Truncate_Instruction_Tacky struct {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+type Zero_Extend_Instruction_Tacky struct {
+	src Value_Tacky
+	dst Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 type Unary_Instruction_Tacky struct {
 	unOp UnaryOperatorType
 	src  Value_Tacky
@@ -517,17 +524,26 @@ func (exp *Variable_Expression) expToTacky(instructions []Instruction_Tacky) (Va
 
 func (exp *Cast_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
 	result, instructions := exp.innerExp.expToTacky(instructions)
-	if exp.targetType == getResultType(exp.innerExp) {
+	innerType := getResultType(exp.innerExp)
+	if exp.targetType == innerType {
 		return result, instructions
 	}
 
 	dst := makeTackyVariable(exp.targetType)
 	// TODO: update as we add more data types
-	if exp.targetType == LONG_TYPE {
+	if size(exp.targetType) == size(innerType) {
+		newInstr := Copy_Instruction_Tacky{src: result, dst: &dst}
+		instructions = append(instructions, &newInstr)
+	} else if size(exp.targetType) < size(innerType) {
+		newInstr := Truncate_Instruction_Tacky{src: result, dst: &dst}
+		instructions = append(instructions, &newInstr)
+	} else if isSigned(innerType) {
+		// the target type is bigger, do a sign extend since the inner type is signed
 		newInstr := Sign_Extend_Instruction_Tacky{src: result, dst: &dst}
 		instructions = append(instructions, &newInstr)
 	} else {
-		newInstr := Truncate_Instruction_Tacky{src: result, dst: &dst}
+		// the target type is bigger, do a zero extend since the inner type is unsigned
+		newInstr := Zero_Extend_Instruction_Tacky{src: result, dst: &dst}
 		instructions = append(instructions, &newInstr)
 	}
 

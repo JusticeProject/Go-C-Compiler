@@ -176,7 +176,6 @@ func resolveBlockItem(existingItem Block_Item, identifierMap map[string]Identifi
 func resolveForInit(fi For_Initial_Clause, identifierMap map[string]Identifier_Info) For_Initial_Clause {
 	switch convertedInit := fi.(type) {
 	case *For_Initial_Declaration:
-		// TODO: change to Declaration then back to Variable_Declaration?
 		newDecl := resolveLocalVariableDeclaration(convertedInit.decl, identifierMap)
 		return &For_Initial_Declaration{decl: newDecl}
 	case *For_Initial_Expression:
