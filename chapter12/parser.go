@@ -48,8 +48,8 @@ const (
 	EXTERN_STORAGE_CLASS
 )
 
-func getStorageClass(token Token) StorageClassEnum {
-	switch token.tokenType {
+func getStorageClass(token TokenEnum) StorageClassEnum {
+	switch token {
 	case STATIC_KEYWORD_TOKEN:
 		return STATIC_STORAGE_CLASS
 	case EXTERN_KEYWORD_TOKEN:
@@ -69,6 +69,8 @@ const (
 	NONE_TYPE DataTypeEnum = iota
 	INT_TYPE
 	LONG_TYPE
+	UNSIGNED_INT_TYPE
+	UNSIGNED_LONG_TYPE
 	FUNCTION_TYPE
 )
 
@@ -404,7 +406,7 @@ func parseProgram(tokens []Token) (Program, []Token) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseDeclaration(tokens []Token) (Declaration, []Token) {
-	var specifiers []Token
+	var specifiers []TokenEnum
 	specifiers, tokens = parseSpecifiers(tokens)
 	if len(specifiers) == 0 {
 		return nil, tokens
@@ -448,13 +450,13 @@ func parseDeclaration(tokens []Token) (Declaration, []Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseSpecifiers(tokens []Token) ([]Token, []Token) {
-	specifiers := []Token{}
+func parseSpecifiers(tokens []Token) ([]TokenEnum, []Token) {
+	specifiers := []TokenEnum{}
 
 	for isSpecifier(peekToken(tokens)) {
 		var spec Token
 		spec, tokens = takeToken(tokens)
-		specifiers = append(specifiers, spec)
+		specifiers = append(specifiers, spec.tokenType)
 	}
 
 	return specifiers, tokens
@@ -468,6 +470,10 @@ func isSpecifier(token Token) bool {
 		return true
 	case LONG_KEYWORD_TOKEN:
 		return true
+	case SIGNED_KEYWORD_TOKEN:
+		return true
+	case UNSIGNED_KEYWORD_TOKEN:
+		return true
 	case STATIC_KEYWORD_TOKEN:
 		return true
 	case EXTERN_KEYWORD_TOKEN:
@@ -479,9 +485,9 @@ func isSpecifier(token Token) bool {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func isSpecifierInList(tokenType TokenEnum, specifiers []Token) bool {
+func isSpecifierInList(tokenType TokenEnum, specifiers []TokenEnum) bool {
 	for index, _ := range specifiers {
-		if specifiers[index].tokenType == tokenType {
+		if specifiers[index] == tokenType {
 			return true
 		}
 	}
@@ -490,31 +496,65 @@ func isSpecifierInList(tokenType TokenEnum, specifiers []Token) bool {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func analyzeType(specifiers []Token) DataTypeEnum {
-	if len(specifiers) == 1 && isSpecifierInList(INT_KEYWORD_TOKEN, specifiers) {
-		return INT_TYPE
-	}
+func removeDuplicateSpecifier(specifiers []TokenEnum) []TokenEnum {
+	set := make(map[TokenEnum]bool)
+	result := []TokenEnum{}
 
-	if isSpecifierInList(LONG_KEYWORD_TOKEN, specifiers) {
-		if len(specifiers) == 1 {
-			return LONG_TYPE
-		}
-		if len(specifiers) == 2 && isSpecifierInList(INT_KEYWORD_TOKEN, specifiers) {
-			return LONG_TYPE
+	for _, spec := range specifiers {
+		if !set[spec] {
+			set[spec] = true
+			result = append(result, spec)
 		}
 	}
+	return result
+}
 
-	fail("Invalid type specifier")
-	return NONE_TYPE
+func hasDuplicateSpecifier(specifiers []TokenEnum) bool {
+	specsNoDupes := removeDuplicateSpecifier(specifiers)
+	if len(specifiers) == len(specsNoDupes) {
+		return false
+	} else {
+		return true
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func isDataTypeKeyword(token Token) bool {
-	switch token.tokenType {
+func analyzeType(specifiers []TokenEnum) DataTypeEnum {
+	if len(specifiers) == 0 {
+		fail("Missing type specifier")
+	}
+	if hasDuplicateSpecifier(specifiers) {
+		fail("Can't use same specifier more than once")
+	}
+	if isSpecifierInList(SIGNED_KEYWORD_TOKEN, specifiers) && isSpecifierInList(UNSIGNED_KEYWORD_TOKEN, specifiers) {
+		fail("Can't use both signed and unsigned specifiers")
+	}
+
+	if isSpecifierInList(UNSIGNED_KEYWORD_TOKEN, specifiers) && isSpecifierInList(LONG_KEYWORD_TOKEN, specifiers) {
+		return UNSIGNED_LONG_TYPE
+	}
+	if isSpecifierInList(UNSIGNED_KEYWORD_TOKEN, specifiers) {
+		return UNSIGNED_INT_TYPE
+	}
+	if isSpecifierInList(LONG_KEYWORD_TOKEN, specifiers) {
+		return LONG_TYPE
+	}
+
+	return INT_TYPE
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func isDataTypeKeyword(token TokenEnum) bool {
+	switch token {
 	case INT_KEYWORD_TOKEN:
 		return true
 	case LONG_KEYWORD_TOKEN:
+		return true
+	case SIGNED_KEYWORD_TOKEN:
+		return true
+	case UNSIGNED_KEYWORD_TOKEN:
 		return true
 	default:
 		return false
@@ -523,9 +563,9 @@ func isDataTypeKeyword(token Token) bool {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func analyzeTypeAndStorageClass(specifiers []Token) (DataTypeEnum, StorageClassEnum) {
-	types := []Token{}
-	storageClasses := []Token{}
+func analyzeTypeAndStorageClass(specifiers []TokenEnum) (DataTypeEnum, StorageClassEnum) {
+	types := []TokenEnum{}
+	storageClasses := []TokenEnum{}
 	for _, spec := range specifiers {
 		if isDataTypeKeyword(spec) {
 			types = append(types, spec)
@@ -561,7 +601,7 @@ func parseParamList(tokens []Token) ([]string, []*Data_Type, []Token) {
 		foundComma := false
 		for (peekToken(tokens).tokenType != CLOSE_PARENTHESIS_TOKEN) || foundComma {
 			// get the type, static and extern are not allowed for params
-			var specifiers []Token
+			var specifiers []TokenEnum
 			specifiers, tokens = parseSpecifiers(tokens)
 			typ := analyzeType(specifiers)
 			paramTypes = append(paramTypes, &Data_Type{typ: typ})
@@ -642,7 +682,7 @@ func parseBlockItem(tokens []Token) (Block_Item, []Token) {
 func parseForInitial(tokens []Token) (For_Initial_Clause, []Token) {
 	nextToken := peekToken(tokens)
 
-	if isDataTypeKeyword(nextToken) {
+	if isDataTypeKeyword(nextToken.tokenType) {
 		decl, tokens := parseDeclaration(tokens)
 		varDecl, ok := decl.(*Variable_Declaration)
 		if ok {
@@ -847,7 +887,7 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 		return &unExp, tokens
 	} else if nextToken.tokenType == OPEN_PARENTHESIS_TOKEN {
 		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
-		if isDataTypeKeyword(peekToken(tokens)) {
+		if isDataTypeKeyword(peekToken(tokens).tokenType) {
 			// must be a cast expression
 			specifiers, tokens := parseSpecifiers(tokens)
 			typ := analyzeType(specifiers)
@@ -901,6 +941,10 @@ func constantTokenToDataType(token Token) DataTypeEnum {
 		return INT_TYPE
 	case LONG_CONSTANT_TOKEN:
 		return LONG_TYPE
+	case UNSIGNED_INT_CONSTANT_TOKEN:
+		return UNSIGNED_INT_TYPE
+	case UNSIGNED_LONG_CONSTANT_TOKEN:
+		return UNSIGNED_LONG_TYPE
 	default:
 		return NONE_TYPE
 	}
@@ -909,7 +953,8 @@ func constantTokenToDataType(token Token) DataTypeEnum {
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseConstantValue(tokens []Token) (string, DataTypeEnum, []Token) {
-	currentToken, tokens := expectMultiple([]TokenEnum{INT_CONSTANT_TOKEN, LONG_CONSTANT_TOKEN}, tokens)
+	allowedTokens := []TokenEnum{INT_CONSTANT_TOKEN, LONG_CONSTANT_TOKEN, UNSIGNED_INT_CONSTANT_TOKEN, UNSIGNED_LONG_CONSTANT_TOKEN}
+	currentToken, tokens := expectMultiple(allowedTokens, tokens)
 
 	dataTyp := constantTokenToDataType(currentToken)
 
@@ -918,9 +963,16 @@ func parseConstantValue(tokens []Token) (string, DataTypeEnum, []Token) {
 		if err != nil {
 			fail("Could not parse integer:", err.Error())
 		}
-
 		if (dataTyp == INT_TYPE) && (integer > math.MaxInt32) {
 			dataTyp = LONG_TYPE
+		}
+	} else if (dataTyp == UNSIGNED_INT_TYPE) || (dataTyp == UNSIGNED_LONG_TYPE) {
+		integer, err := strconv.ParseUint(currentToken.word, 10, 64)
+		if err != nil {
+			fail("Could not parse unsigned integer:", err.Error())
+		}
+		if (dataTyp == UNSIGNED_INT_TYPE) && (integer > math.MaxUint32) {
+			dataTyp = UNSIGNED_LONG_TYPE
 		}
 	}
 

@@ -50,6 +50,10 @@ var regexp_static_keyword *regexp.Regexp = regexp.MustCompile(`static\b`)
 var regexp_extern_keyword *regexp.Regexp = regexp.MustCompile(`extern\b`)
 var regexp_long_keyword *regexp.Regexp = regexp.MustCompile(`long\b`)
 var regexp_long_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+)[lL]\b`)
+var regexp_signed_keyword *regexp.Regexp = regexp.MustCompile(`signed\b`)
+var regexp_unsigned_keyword *regexp.Regexp = regexp.MustCompile(`unsigned\b`)
+var regexp_unsigned_int_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+)[uU]\b`)
+var regexp_unsigned_long_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+)([lL][uU]|[uU][lL])\b`)
 
 type TokenEnum int
 
@@ -96,52 +100,60 @@ const (
 	EXTERN_KEYWORD_TOKEN
 	LONG_KEYWORD_TOKEN
 	LONG_CONSTANT_TOKEN
+	SIGNED_KEYWORD_TOKEN
+	UNSIGNED_KEYWORD_TOKEN
+	UNSIGNED_INT_CONSTANT_TOKEN
+	UNSIGNED_LONG_CONSTANT_TOKEN
 )
 
 /////////////////////////////////////////////////////////////////////////////////
 
 var allRegexp = map[TokenEnum]*regexp.Regexp{
-	IDENTIFIER_TOKEN:        regexp_identifier,
-	INT_CONSTANT_TOKEN:      regexp_int_constant,
-	INT_KEYWORD_TOKEN:       regexp_int_keyword,
-	VOID_KEYWORD_TOKEN:      regexp_void_keyword,
-	RETURN_KEYWORD_TOKEN:    regexp_return_keyword,
-	OPEN_PARENTHESIS_TOKEN:  regexp_open_parenthesis,
-	CLOSE_PARENTHESIS_TOKEN: regexp_close_parenthesis,
-	OPEN_BRACE_TOKEN:        regexp_open_brace,
-	CLOSE_BRACE_TOKEN:       regexp_close_brace,
-	SEMICOLON_TOKEN:         regexp_semicolon,
-	TILDE_TOKEN:             regexp_tilde,
-	HYPHEN_TOKEN:            regexp_hyphen,
-	TWO_HYPHENS_TOKEN:       regexp_two_hyphens,
-	PLUS_TOKEN:              regexp_plus,
-	ASTERISK_TOKEN:          regexp_asterisk,
-	FORWARD_SLASH_TOKEN:     regexp_forward_slash,
-	PERCENT_TOKEN:           regexp_percent,
-	EXCLAMATION_TOKEN:       regexp_exclamation,
-	TWO_AMPERSANDS_TOKEN:    regexp_two_ampersands,
-	TWO_VERTICAL_BARS_TOKEN: regexp_two_vertical_bars,
-	TWO_EQUAL_SIGNS_TOKEN:   regexp_two_equal_signs,
-	EXCLAMATION_EQUAL_TOKEN: regexp_exclamation_equal,
-	LESS_THAN_TOKEN:         regexp_less_than,
-	GREATER_THAN_TOKEN:      regexp_greater_than,
-	LESS_OR_EQUAL_TOKEN:     regexp_less_or_equal,
-	GREATER_OR_EQUAL_TOKEN:  regexp_greater_or_equal,
-	EQUAL_TOKEN:             regexp_equal,
-	IF_KEYWORD_TOKEN:        regexp_if_keyword,
-	ELSE_KEYWORD_TOKEN:      regexp_else_keyword,
-	QUESTION_TOKEN:          regexp_question,
-	COLON_TOKEN:             regexp_colon,
-	DO_KEYWORD_TOKEN:        regexp_do_keyword,
-	WHILE_KEYWORD_TOKEN:     regexp_while_keyword,
-	FOR_KEYWORD_TOKEN:       regexp_for_keyword,
-	BREAK_KEYWORD_TOKEN:     regexp_break_keyword,
-	CONTINUE_KEYWORD_TOKEN:  regexp_continue_keyword,
-	COMMA_TOKEN:             regexp_comma,
-	STATIC_KEYWORD_TOKEN:    regexp_static_keyword,
-	EXTERN_KEYWORD_TOKEN:    regexp_extern_keyword,
-	LONG_KEYWORD_TOKEN:      regexp_long_keyword,
-	LONG_CONSTANT_TOKEN:     regexp_long_constant,
+	IDENTIFIER_TOKEN:             regexp_identifier,
+	INT_CONSTANT_TOKEN:           regexp_int_constant,
+	INT_KEYWORD_TOKEN:            regexp_int_keyword,
+	VOID_KEYWORD_TOKEN:           regexp_void_keyword,
+	RETURN_KEYWORD_TOKEN:         regexp_return_keyword,
+	OPEN_PARENTHESIS_TOKEN:       regexp_open_parenthesis,
+	CLOSE_PARENTHESIS_TOKEN:      regexp_close_parenthesis,
+	OPEN_BRACE_TOKEN:             regexp_open_brace,
+	CLOSE_BRACE_TOKEN:            regexp_close_brace,
+	SEMICOLON_TOKEN:              regexp_semicolon,
+	TILDE_TOKEN:                  regexp_tilde,
+	HYPHEN_TOKEN:                 regexp_hyphen,
+	TWO_HYPHENS_TOKEN:            regexp_two_hyphens,
+	PLUS_TOKEN:                   regexp_plus,
+	ASTERISK_TOKEN:               regexp_asterisk,
+	FORWARD_SLASH_TOKEN:          regexp_forward_slash,
+	PERCENT_TOKEN:                regexp_percent,
+	EXCLAMATION_TOKEN:            regexp_exclamation,
+	TWO_AMPERSANDS_TOKEN:         regexp_two_ampersands,
+	TWO_VERTICAL_BARS_TOKEN:      regexp_two_vertical_bars,
+	TWO_EQUAL_SIGNS_TOKEN:        regexp_two_equal_signs,
+	EXCLAMATION_EQUAL_TOKEN:      regexp_exclamation_equal,
+	LESS_THAN_TOKEN:              regexp_less_than,
+	GREATER_THAN_TOKEN:           regexp_greater_than,
+	LESS_OR_EQUAL_TOKEN:          regexp_less_or_equal,
+	GREATER_OR_EQUAL_TOKEN:       regexp_greater_or_equal,
+	EQUAL_TOKEN:                  regexp_equal,
+	IF_KEYWORD_TOKEN:             regexp_if_keyword,
+	ELSE_KEYWORD_TOKEN:           regexp_else_keyword,
+	QUESTION_TOKEN:               regexp_question,
+	COLON_TOKEN:                  regexp_colon,
+	DO_KEYWORD_TOKEN:             regexp_do_keyword,
+	WHILE_KEYWORD_TOKEN:          regexp_while_keyword,
+	FOR_KEYWORD_TOKEN:            regexp_for_keyword,
+	BREAK_KEYWORD_TOKEN:          regexp_break_keyword,
+	CONTINUE_KEYWORD_TOKEN:       regexp_continue_keyword,
+	COMMA_TOKEN:                  regexp_comma,
+	STATIC_KEYWORD_TOKEN:         regexp_static_keyword,
+	EXTERN_KEYWORD_TOKEN:         regexp_extern_keyword,
+	LONG_KEYWORD_TOKEN:           regexp_long_keyword,
+	LONG_CONSTANT_TOKEN:          regexp_long_constant,
+	SIGNED_KEYWORD_TOKEN:         regexp_signed_keyword,
+	UNSIGNED_KEYWORD_TOKEN:       regexp_unsigned_keyword,
+	UNSIGNED_INT_CONSTANT_TOKEN:  regexp_unsigned_int_constant,
+	UNSIGNED_LONG_CONSTANT_TOKEN: regexp_unsigned_long_constant,
 }
 
 var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{
@@ -158,6 +170,8 @@ var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{
 	STATIC_KEYWORD_TOKEN:   regexp_static_keyword,
 	EXTERN_KEYWORD_TOKEN:   regexp_extern_keyword,
 	LONG_KEYWORD_TOKEN:     regexp_long_keyword,
+	SIGNED_KEYWORD_TOKEN:   regexp_signed_keyword,
+	UNSIGNED_KEYWORD_TOKEN: regexp_unsigned_keyword,
 }
 
 /////////////////////////////////////////////////////////////////////////////////

@@ -9,6 +9,8 @@ const (
 	TENTATIVE_INIT
 	INITIAL_INT
 	INITIAL_LONG
+	INITIAL_UNSIGNED_INT
+	INITIAL_UNSIGNED_LONG
 )
 
 func dataTypeEnumToInitEnum(input DataTypeEnum) InitializerEnum {
@@ -17,6 +19,10 @@ func dataTypeEnumToInitEnum(input DataTypeEnum) InitializerEnum {
 		return INITIAL_INT
 	case LONG_TYPE:
 		return INITIAL_LONG
+	case UNSIGNED_INT_TYPE:
+		return INITIAL_UNSIGNED_INT
+	case UNSIGNED_LONG_TYPE:
+		return INITIAL_UNSIGNED_LONG
 	}
 
 	fail("Can't convert DataTypeEnum to InitializerEnum")
@@ -104,7 +110,7 @@ func getResultType(exp Expression) DataTypeEnum {
 	case *Function_Call_Expression:
 		return convertedExp.resultTyp
 	default:
-		fail("Unknown Expression in setResultType")
+		fail("Unknown Expression in getResultType")
 	}
 	return NONE_TYPE
 }
@@ -121,11 +127,46 @@ func convertToType(exp Expression, newTyp DataTypeEnum) Expression {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func size(typ DataTypeEnum) int32 {
+	return asmTypToAlignment(dataTypeEnumToAssemblyTypeEnum(typ))
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func isSigned(typ DataTypeEnum) bool {
+	switch typ {
+	case INT_TYPE:
+		return true
+	case LONG_TYPE:
+		return true
+	case UNSIGNED_INT_TYPE:
+		return false
+	case UNSIGNED_LONG_TYPE:
+		return false
+	}
+	fail("Can't determine signedness")
+	return false
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func getCommonType(typ1 DataTypeEnum, typ2 DataTypeEnum) DataTypeEnum {
 	if typ1 == typ2 {
 		return typ1
+	}
+
+	if size(typ1) == size(typ2) {
+		if isSigned(typ1) {
+			return typ2
+		} else {
+			return typ1
+		}
+	}
+
+	if size(typ1) > size(typ2) {
+		return typ1
 	} else {
-		return LONG_TYPE
+		return typ2
 	}
 }
 
@@ -234,14 +275,17 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) Variable_Declaration {
 		// TODO: update this when more types are available, and the else if below.
 		// We don't want to initialize a variable twice because the two values could be conflicting,
 		// so if both decl's initialize then throw an error.
-		if (oldDecl.initEnum == INITIAL_INT) || (oldDecl.initEnum == INITIAL_LONG) {
+		if (oldDecl.initEnum == INITIAL_INT) || (oldDecl.initEnum == INITIAL_LONG) ||
+			(oldDecl.initEnum == INITIAL_UNSIGNED_INT) || (oldDecl.initEnum == INITIAL_UNSIGNED_LONG) {
 			if initEnum == oldDecl.initEnum {
 				fail("Conflicting file scope variable declarations")
 			} else {
 				initEnum = oldDecl.initEnum
 				initialValue = oldDecl.initialValue
 			}
-		} else if (initEnum != INITIAL_INT) && (initEnum != INITIAL_LONG) && (oldDecl.initEnum == TENTATIVE_INIT) {
+		} else if (initEnum != INITIAL_INT) && (initEnum != INITIAL_LONG) &&
+			(initEnum != INITIAL_UNSIGNED_INT) && (initEnum != INITIAL_UNSIGNED_LONG) &&
+			(oldDecl.initEnum == TENTATIVE_INIT) {
 			initEnum = TENTATIVE_INIT
 		}
 	}

@@ -1,10 +1,10 @@
-long sum(long a, long b);
+unsigned long sum(unsigned long a, unsigned long b);
 
 int main(void) {
-    long result = sum(9L, (long)2);
+    unsigned long result = sum(9UL, (unsigned long)2);
     return result;
 }
 
-long sum(long a, long b) {
+unsigned long sum(unsigned long a, unsigned long b) {
     return a + b;
 }
