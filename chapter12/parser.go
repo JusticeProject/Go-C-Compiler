@@ -407,7 +407,7 @@ func parseProgram(tokens []Token) (Program, []Token) {
 
 func parseDeclaration(tokens []Token) (Declaration, []Token) {
 	var specifiers []TokenEnum
-	specifiers, tokens = parseSpecifiers(tokens)
+	specifiers, tokens = parseSpecifiers(tokens, true)
 	if len(specifiers) == 0 {
 		return nil, tokens
 	}
@@ -450,13 +450,19 @@ func parseDeclaration(tokens []Token) (Declaration, []Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseSpecifiers(tokens []Token) ([]TokenEnum, []Token) {
+func parseSpecifiers(tokens []Token, storageClassAllowed bool) ([]TokenEnum, []Token) {
 	specifiers := []TokenEnum{}
 
 	for isSpecifier(peekToken(tokens)) {
 		var spec Token
 		spec, tokens = takeToken(tokens)
 		specifiers = append(specifiers, spec.tokenType)
+	}
+
+	if !storageClassAllowed {
+		if isSpecifierInList(STATIC_KEYWORD_TOKEN, specifiers) || isSpecifierInList(EXTERN_KEYWORD_TOKEN, specifiers) {
+			fail("Storage class specifier not allowed in parameter lists and cast expressions")
+		}
 	}
 
 	return specifiers, tokens
@@ -602,7 +608,7 @@ func parseParamList(tokens []Token) ([]string, []*Data_Type, []Token) {
 		for (peekToken(tokens).tokenType != CLOSE_PARENTHESIS_TOKEN) || foundComma {
 			// get the type, static and extern are not allowed for params
 			var specifiers []TokenEnum
-			specifiers, tokens = parseSpecifiers(tokens)
+			specifiers, tokens = parseSpecifiers(tokens, false)
 			typ := analyzeType(specifiers)
 			paramTypes = append(paramTypes, &Data_Type{typ: typ})
 
@@ -889,7 +895,7 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
 		if isDataTypeKeyword(peekToken(tokens).tokenType) {
 			// must be a cast expression
-			specifiers, tokens := parseSpecifiers(tokens)
+			specifiers, tokens := parseSpecifiers(tokens, false)
 			typ := analyzeType(specifiers)
 			_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
 			exp, tokens := parseFactor(tokens)
