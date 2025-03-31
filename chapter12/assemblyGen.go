@@ -41,6 +41,10 @@ func dataTypeEnumToAssemblyTypeEnum(input DataTypeEnum) AssemblyTypeEnum {
 		return LONGWORD_ASM_TYPE
 	case LONG_TYPE:
 		return QUADWORD_ASM_TYPE
+	case UNSIGNED_INT_TYPE:
+		return LONGWORD_ASM_TYPE
+	case UNSIGNED_LONG_TYPE:
+		return QUADWORD_ASM_TYPE
 	case FUNCTION_TYPE:
 		return NONE_ASM_TYPE
 	}
@@ -68,6 +72,10 @@ func initToAlignment(initEnum InitializerEnum) int32 {
 	case INITIAL_INT:
 		return 4
 	case INITIAL_LONG:
+		return 8
+	case INITIAL_UNSIGNED_INT:
+		return 4
+	case INITIAL_UNSIGNED_LONG:
 		return 8
 	}
 	fail("Can not convert InitializerEnum to alignment")
@@ -151,6 +159,13 @@ type Movsx_Instruction_Asm struct {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+type Move_Zero_Extend_Instruction_Asm struct {
+	src Operand_Asm
+	dst Operand_Asm
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 type Unary_Instruction_Asm struct {
 	unOp   UnaryOperatorTypeAsm
 	asmTyp AssemblyTypeEnum
@@ -177,6 +192,13 @@ type Compare_Instruction_Asm struct {
 /////////////////////////////////////////////////////////////////////////////////
 
 type IDivide_Instruction_Asm struct {
+	asmTyp  AssemblyTypeEnum
+	divisor Operand_Asm
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Divide_Instruction_Asm struct {
 	asmTyp  AssemblyTypeEnum
 	divisor Operand_Asm
 }
@@ -296,6 +318,7 @@ func opIsBigImm(op Operand_Asm) bool {
 	if !isImm {
 		return false
 	}
+	// TODO: ParseUint?
 	integer, _ := strconv.ParseInt(imm.value, 10, 64)
 	if integer > math.MaxInt32 {
 		return true
@@ -349,22 +372,42 @@ const (
 	LESS_OR_EQUAL_CODE_ASM
 	GREATER_THAN_CODE_ASM
 	GREATER_OR_EQUAL_CODE_ASM
+	LESS_THAN_CODE_UNSIGNED_ASM
+	LESS_OR_EQUAL_CODE_UNSIGNED_ASM
+	GREATER_THAN_CODE_UNSIGNED_ASM
+	GREATER_OR_EQUAL_CODE_UNSIGNED_ASM
 )
 
-func convertBinaryOpToCondition(binOp BinaryOperatorType) ConditionalCodeAsm {
+func convertBinaryOpToCondition(binOp BinaryOperatorType, signed bool) ConditionalCodeAsm {
 	switch binOp {
 	case IS_EQUAL_OPERATOR:
 		return IS_EQUAL_CODE_ASM
 	case NOT_EQUAL_OPERATOR:
 		return NOT_EQUAL_CODE_ASM
 	case LESS_THAN_OPERATOR:
-		return LESS_THAN_CODE_ASM
+		if signed {
+			return LESS_THAN_CODE_ASM
+		} else {
+			return LESS_THAN_CODE_UNSIGNED_ASM
+		}
 	case LESS_OR_EQUAL_OPERATOR:
-		return LESS_OR_EQUAL_CODE_ASM
+		if signed {
+			return LESS_OR_EQUAL_CODE_ASM
+		} else {
+			return LESS_OR_EQUAL_CODE_UNSIGNED_ASM
+		}
 	case GREATER_THAN_OPERATOR:
-		return GREATER_THAN_CODE_ASM
+		if signed {
+			return GREATER_THAN_CODE_ASM
+		} else {
+			return GREATER_THAN_CODE_UNSIGNED_ASM
+		}
 	case GREATER_OR_EQUAL_OPERATOR:
-		return GREATER_OR_EQUAL_CODE_ASM
+		if signed {
+			return GREATER_OR_EQUAL_CODE_ASM
+		} else {
+			return GREATER_OR_EQUAL_CODE_UNSIGNED_ASM
+		}
 	default:
 		fail("unknown BinaryOperatorType when converting to code")
 	}
@@ -499,6 +542,13 @@ func (instr *Truncate_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (instr *Zero_Extend_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
+	mov := Move_Zero_Extend_Instruction_Asm{src: instr.src.valueToAsm(), dst: instr.dst.valueToAsm()}
+	return []Instruction_Asm{&mov}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (instr *Unary_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 	if instr.unOp == NOT_OPERATOR {
 		cmp := Compare_Instruction_Asm{asmTyp: instr.src.getAssemblyType(), op1: &Immediate_Int_Operand_Asm{"0"}, op2: instr.src.valueToAsm()}
@@ -532,24 +582,43 @@ func (instr *Binary_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
 		instructions := []Instruction_Asm{&movInstr, &binInstr}
 		return instructions
 	} else if instr.binOp == DIVIDE_OPERATOR {
-		firstMov := Mov_Instruction_Asm{asmTyp: instr.src1.getAssemblyType(), src: instr.src1.valueToAsm(), dst: &Register_Operand_Asm{AX_REGISTER_ASM}}
-		cdq := CDQ_Sign_Extend_Instruction_Asm{asmTyp: instr.src1.getAssemblyType()}
-		idiv := IDivide_Instruction_Asm{asmTyp: instr.src2.getAssemblyType(), divisor: instr.src2.valueToAsm()}
-		secondMov := Mov_Instruction_Asm{asmTyp: instr.dst.getAssemblyType(), src: &Register_Operand_Asm{AX_REGISTER_ASM}, dst: instr.dst.valueToAsm()}
-		instructions := []Instruction_Asm{&firstMov, &cdq, &idiv, &secondMov}
-		return instructions
+		if instr.src1.isSigned() {
+			firstMov := Mov_Instruction_Asm{asmTyp: instr.src1.getAssemblyType(), src: instr.src1.valueToAsm(), dst: &Register_Operand_Asm{AX_REGISTER_ASM}}
+			cdq := CDQ_Sign_Extend_Instruction_Asm{asmTyp: instr.src1.getAssemblyType()}
+			idiv := IDivide_Instruction_Asm{asmTyp: instr.src2.getAssemblyType(), divisor: instr.src2.valueToAsm()}
+			secondMov := Mov_Instruction_Asm{asmTyp: instr.dst.getAssemblyType(), src: &Register_Operand_Asm{AX_REGISTER_ASM}, dst: instr.dst.valueToAsm()}
+			instructions := []Instruction_Asm{&firstMov, &cdq, &idiv, &secondMov}
+			return instructions
+		} else {
+			firstMov := Mov_Instruction_Asm{asmTyp: instr.src1.getAssemblyType(), src: instr.src1.valueToAsm(), dst: &Register_Operand_Asm{AX_REGISTER_ASM}}
+			zero := Mov_Instruction_Asm{asmTyp: instr.src1.getAssemblyType(), src: &Immediate_Int_Operand_Asm{"0"}, dst: &Register_Operand_Asm{DX_REGISTER_ASM}}
+			div := Divide_Instruction_Asm{asmTyp: instr.src2.getAssemblyType(), divisor: instr.src2.valueToAsm()}
+			secondMov := Mov_Instruction_Asm{asmTyp: instr.dst.getAssemblyType(), src: &Register_Operand_Asm{AX_REGISTER_ASM}, dst: instr.dst.valueToAsm()}
+			instructions := []Instruction_Asm{&firstMov, &zero, &div, &secondMov}
+			return instructions
+		}
 	} else if instr.binOp == REMAINDER_OPERATOR {
-		firstMov := Mov_Instruction_Asm{asmTyp: instr.src1.getAssemblyType(), src: instr.src1.valueToAsm(), dst: &Register_Operand_Asm{AX_REGISTER_ASM}}
-		cdq := CDQ_Sign_Extend_Instruction_Asm{asmTyp: instr.src1.getAssemblyType()}
-		idiv := IDivide_Instruction_Asm{asmTyp: instr.src2.getAssemblyType(), divisor: instr.src2.valueToAsm()}
-		secondMov := Mov_Instruction_Asm{asmTyp: instr.dst.getAssemblyType(), src: &Register_Operand_Asm{DX_REGISTER_ASM}, dst: instr.dst.valueToAsm()}
-		instructions := []Instruction_Asm{&firstMov, &cdq, &idiv, &secondMov}
-		return instructions
+		if instr.src1.isSigned() {
+			firstMov := Mov_Instruction_Asm{asmTyp: instr.src1.getAssemblyType(), src: instr.src1.valueToAsm(), dst: &Register_Operand_Asm{AX_REGISTER_ASM}}
+			cdq := CDQ_Sign_Extend_Instruction_Asm{asmTyp: instr.src1.getAssemblyType()}
+			idiv := IDivide_Instruction_Asm{asmTyp: instr.src2.getAssemblyType(), divisor: instr.src2.valueToAsm()}
+			secondMov := Mov_Instruction_Asm{asmTyp: instr.dst.getAssemblyType(), src: &Register_Operand_Asm{DX_REGISTER_ASM}, dst: instr.dst.valueToAsm()}
+			instructions := []Instruction_Asm{&firstMov, &cdq, &idiv, &secondMov}
+			return instructions
+		} else {
+			firstMov := Mov_Instruction_Asm{asmTyp: instr.src1.getAssemblyType(), src: instr.src1.valueToAsm(), dst: &Register_Operand_Asm{AX_REGISTER_ASM}}
+			zero := Mov_Instruction_Asm{asmTyp: instr.src1.getAssemblyType(), src: &Immediate_Int_Operand_Asm{"0"}, dst: &Register_Operand_Asm{DX_REGISTER_ASM}}
+			div := Divide_Instruction_Asm{asmTyp: instr.src2.getAssemblyType(), divisor: instr.src2.valueToAsm()}
+			secondMov := Mov_Instruction_Asm{asmTyp: instr.dst.getAssemblyType(), src: &Register_Operand_Asm{DX_REGISTER_ASM}, dst: instr.dst.valueToAsm()}
+			instructions := []Instruction_Asm{&firstMov, &zero, &div, &secondMov}
+			return instructions
+		}
 	} else if instr.binOp == IS_EQUAL_OPERATOR || instr.binOp == NOT_EQUAL_OPERATOR || instr.binOp == LESS_THAN_OPERATOR ||
 		instr.binOp == LESS_OR_EQUAL_OPERATOR || instr.binOp == GREATER_THAN_OPERATOR || instr.binOp == GREATER_OR_EQUAL_OPERATOR {
 		cmp := Compare_Instruction_Asm{asmTyp: instr.src1.getAssemblyType(), op1: instr.src2.valueToAsm(), op2: instr.src1.valueToAsm()}
 		mov := Mov_Instruction_Asm{asmTyp: instr.dst.getAssemblyType(), src: &Immediate_Int_Operand_Asm{"0"}, dst: instr.dst.valueToAsm()}
-		setC := Set_Conditional_Instruction_Asm{code: convertBinaryOpToCondition(instr.binOp), dst: instr.dst.valueToAsm()}
+		signed := instr.src1.isSigned()
+		setC := Set_Conditional_Instruction_Asm{code: convertBinaryOpToCondition(instr.binOp, signed), dst: instr.dst.valueToAsm()}
 		instructions := []Instruction_Asm{&cmp, &mov, &setC}
 		return instructions
 	} else {
@@ -701,6 +770,12 @@ func (val *Constant_Value_Tacky) getAssemblyType() AssemblyTypeEnum {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (val *Constant_Value_Tacky) isSigned() bool {
+	return isSigned(val.typ)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (val *Variable_Value_Tacky) valueToAsm() Operand_Asm {
 	return &Pseudoregister_Operand_Asm{name: val.name}
 }
@@ -709,6 +784,12 @@ func (val *Variable_Value_Tacky) valueToAsm() Operand_Asm {
 
 func (val *Variable_Value_Tacky) getAssemblyType() AssemblyTypeEnum {
 	return getAsmTypeOfVariable(val.name)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (val *Variable_Value_Tacky) isSigned() bool {
+	return isSigned(symbolTable[val.name].dataTyp.typ)
 }
 
 //###############################################################################
@@ -742,6 +823,10 @@ func (fn *Function_Asm) replacePseudoregisters(nameToOffset map[string]int32) {
 			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &fn.stackSize, nameToOffset)
 			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
+		case *Move_Zero_Extend_Instruction_Asm:
+			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &fn.stackSize, nameToOffset)
+			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &fn.stackSize, nameToOffset)
+			fn.instructions[index] = convertedInstr
 		case *Unary_Instruction_Asm:
 			convertedInstr.src = replaceIfPseudoregister(convertedInstr.src, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
@@ -750,6 +835,9 @@ func (fn *Function_Asm) replacePseudoregisters(nameToOffset map[string]int32) {
 			convertedInstr.dst = replaceIfPseudoregister(convertedInstr.dst, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
 		case *IDivide_Instruction_Asm:
+			convertedInstr.divisor = replaceIfPseudoregister(convertedInstr.divisor, &fn.stackSize, nameToOffset)
+			fn.instructions[index] = convertedInstr
+		case *Divide_Instruction_Asm:
 			convertedInstr.divisor = replaceIfPseudoregister(convertedInstr.divisor, &fn.stackSize, nameToOffset)
 			fn.instructions[index] = convertedInstr
 		case *Compare_Instruction_Asm:
@@ -843,10 +931,16 @@ func (fn *Function_Asm) fixInvalidInstr() {
 		case *Movsx_Instruction_Asm:
 			newInstrs := convertedInstr.fixInvalidInstr()
 			instructions = append(instructions, newInstrs...)
+		case *Move_Zero_Extend_Instruction_Asm:
+			newInstrs := convertedInstr.fixInvalidInstr()
+			instructions = append(instructions, newInstrs...)
 		case *Binary_Instruction_Asm:
 			newInstrs := convertedInstr.fixInvalidInstr()
 			instructions = append(instructions, newInstrs...)
 		case *IDivide_Instruction_Asm:
+			newInstrs := convertedInstr.fixInvalidInstr()
+			instructions = append(instructions, newInstrs...)
+		case *Divide_Instruction_Asm:
 			newInstrs := convertedInstr.fixInvalidInstr()
 			instructions = append(instructions, newInstrs...)
 		case *Compare_Instruction_Asm:
@@ -922,6 +1016,25 @@ func (instr *Movsx_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (instr *Move_Zero_Extend_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
+	_, dstIsReg := instr.dst.(*Register_Operand_Asm)
+	_, dstIsStack := instr.dst.(*Stack_Operand_Asm)
+	_, dstIsStatic := instr.dst.(*Data_Operand_Asm)
+
+	if dstIsReg {
+		mov := Mov_Instruction_Asm{asmTyp: LONGWORD_ASM_TYPE, src: instr.src, dst: instr.dst}
+		return []Instruction_Asm{&mov}
+	} else if dstIsStack || dstIsStatic {
+		mov1 := Mov_Instruction_Asm{asmTyp: LONGWORD_ASM_TYPE, src: instr.src, dst: &Register_Operand_Asm{R11_REGISTER_ASM}}
+		mov2 := Mov_Instruction_Asm{asmTyp: QUADWORD_ASM_TYPE, src: &Register_Operand_Asm{R11_REGISTER_ASM}, dst: instr.dst}
+		return []Instruction_Asm{&mov1, &mov2}
+	}
+
+	return []Instruction_Asm{instr}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (instr *Binary_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 	if instr.binOp == ADD_OPERATOR_ASM || instr.binOp == SUB_OPERATOR_ASM {
 		_, srcIsStack := instr.src.(*Stack_Operand_Asm)
@@ -969,6 +1082,20 @@ func (instr *IDivide_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
 	if isConstant {
 		firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.divisor, dst: &Register_Operand_Asm{R10_REGISTER_ASM}}
 		secondInstr := IDivide_Instruction_Asm{asmTyp: instr.asmTyp, divisor: &Register_Operand_Asm{R10_REGISTER_ASM}}
+		return []Instruction_Asm{&firstInstr, &secondInstr}
+	}
+
+	return []Instruction_Asm{instr}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (instr *Divide_Instruction_Asm) fixInvalidInstr() []Instruction_Asm {
+	_, isConstant := instr.divisor.(*Immediate_Int_Operand_Asm)
+
+	if isConstant {
+		firstInstr := Mov_Instruction_Asm{asmTyp: instr.asmTyp, src: instr.divisor, dst: &Register_Operand_Asm{R10_REGISTER_ASM}}
+		secondInstr := Divide_Instruction_Asm{asmTyp: instr.asmTyp, divisor: &Register_Operand_Asm{R10_REGISTER_ASM}}
 		return []Instruction_Asm{&firstInstr, &secondInstr}
 	}
 

@@ -58,9 +58,9 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 
 	alignStr := strconv.FormatInt(int64(st.alignment), 10)
 	typStr := ""
-	if st.initEnum == INITIAL_INT {
+	if (st.initEnum == INITIAL_INT) || (st.initEnum == INITIAL_UNSIGNED_INT) {
 		typStr = ".long "
-	} else if st.initEnum == INITIAL_LONG {
+	} else if (st.initEnum == INITIAL_LONG) || (st.initEnum == INITIAL_UNSIGNED_INT) {
 		typStr = ".quad "
 	}
 
@@ -95,6 +95,12 @@ func (instr *Movsx_Instruction_Asm) instrEmitAsm(file *os.File) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (instr *Move_Zero_Extend_Instruction_Asm) instrEmitAsm(file *os.File) {
+	fail("Move_Zero_Extend_Instruction_Asm should have been rewritten in the previous step")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (instr *Unary_Instruction_Asm) instrEmitAsm(file *os.File) {
 	file.WriteString("\t" + getUnaryOperatorString(instr.unOp) + getInstructionSuffix(instr.asmTyp) + "\t" +
 		instr.src.getOperandString(instr.asmTyp) + "\n")
@@ -118,6 +124,12 @@ func (instr *Compare_Instruction_Asm) instrEmitAsm(file *os.File) {
 
 func (instr *IDivide_Instruction_Asm) instrEmitAsm(file *os.File) {
 	file.WriteString("\t" + "idiv" + getInstructionSuffix(instr.asmTyp) + "\t" + instr.divisor.getOperandString(instr.asmTyp) + "\n")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (instr *Divide_Instruction_Asm) instrEmitAsm(file *os.File) {
+	file.WriteString("\t" + "div" + getInstructionSuffix(instr.asmTyp) + "\t" + instr.divisor.getOperandString(instr.asmTyp) + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -270,6 +282,14 @@ func getConditionalCodeString(code ConditionalCodeAsm) string {
 		return "g"
 	case GREATER_OR_EQUAL_CODE_ASM:
 		return "ge"
+	case LESS_THAN_CODE_UNSIGNED_ASM:
+		return "b"
+	case LESS_OR_EQUAL_CODE_UNSIGNED_ASM:
+		return "be"
+	case GREATER_THAN_CODE_UNSIGNED_ASM:
+		return "a"
+	case GREATER_OR_EQUAL_CODE_UNSIGNED_ASM:
+		return "ae"
 	default:
 		fail("unknown conditional code")
 	}
