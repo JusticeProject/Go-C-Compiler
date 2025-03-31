@@ -60,7 +60,7 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 	typStr := ""
 	if (st.initEnum == INITIAL_INT) || (st.initEnum == INITIAL_UNSIGNED_INT) {
 		typStr = ".long "
-	} else if (st.initEnum == INITIAL_LONG) || (st.initEnum == INITIAL_UNSIGNED_INT) {
+	} else if (st.initEnum == INITIAL_LONG) || (st.initEnum == INITIAL_UNSIGNED_LONG) {
 		typStr = ".quad "
 	}
 
