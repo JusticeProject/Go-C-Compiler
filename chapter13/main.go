@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 )
@@ -42,6 +43,7 @@ func doLinux() {
 	fmt.Println("found", len(os.Args), "args")
 
 	allInputFileNames := []string{}
+	libraries := []string{}
 
 	runParser := true
 	runSemanticAnalysis := true
@@ -93,7 +95,16 @@ func doLinux() {
 					index++
 				}
 			default:
-				fail("unknown option, exiting")
+				// it could be a library that we need to link
+				re, _ := regexp.Compile(`-l[a-zA-Z0-9]+`)
+				result := re.FindStringIndex(currentArg)
+				if len(result) > 0 {
+					lib := currentArg[result[0]:result[1]]
+					fmt.Println("Will link library using", lib)
+					libraries = append(libraries, lib)
+				} else {
+					fail("unknown option, exiting")
+				}
 			}
 		}
 	}
@@ -147,6 +158,8 @@ func doLinux() {
 			outputFilename = strings.TrimSuffix(allInputFileNames[0], ".c")
 		}
 		gccArgs = append(gccArgs, outputFilename)
+		gccArgs = append(gccArgs, libraries...)
+		fmt.Println("Running cmd gcc with args:", gccArgs)
 
 		outBytes, err := exec.Command("gcc", gccArgs...).CombinedOutput()
 		if err != nil {
