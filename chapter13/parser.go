@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 )
 
 //###############################################################################
@@ -963,6 +964,9 @@ func parseConstantValue(tokens []Token) (string, DataTypeEnum, []Token) {
 	currentToken, tokens := expectMultiple(allowedTokens, tokens)
 
 	dataTyp := constantTokenToDataType(currentToken)
+
+	// remove the trailing characters that some constants have, like the L in 100L, Go's parser doesn't like them
+	currentToken.word = strings.TrimRight(currentToken.word, "lLuU")
 
 	if (dataTyp == INT_TYPE) || (dataTyp == LONG_TYPE) {
 		integer, err := strconv.ParseInt(currentToken.word, 10, 64)

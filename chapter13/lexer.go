@@ -7,10 +7,15 @@ import (
 
 /////////////////////////////////////////////////////////////////////////////////
 
+// For info on regex syntax:  https://github.com/google/re2/wiki/Syntax
 // * is 0 or more, \b is word boundary, use raw strings to make it easier
-// + is 1 or more
+// + is 1 or more, | is or, ? means it's optional
+// \w is the same as [0-9A-Za-z_]
+// \W is the same as [^0-9A-Za-z_] where ^ means not
+// \b means at ASCII word boundary, it won't capture the character that creates this word boundary (like a space),
+// \b means a transition from \w to \W for example
 var regexp_identifier *regexp.Regexp = regexp.MustCompile(`[a-zA-Z_][0-9A-Za-z_]*\b`)
-var regexp_int_constant *regexp.Regexp = regexp.MustCompile(`[0-9]+\b`)
+var regexp_int_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+)[^\w.]`)
 var regexp_int_keyword *regexp.Regexp = regexp.MustCompile(`int\b`)
 var regexp_void_keyword *regexp.Regexp = regexp.MustCompile(`void\b`)
 var regexp_return_keyword *regexp.Regexp = regexp.MustCompile(`return\b`)
@@ -49,11 +54,13 @@ var regexp_comma *regexp.Regexp = regexp.MustCompile(`,`)
 var regexp_static_keyword *regexp.Regexp = regexp.MustCompile(`static\b`)
 var regexp_extern_keyword *regexp.Regexp = regexp.MustCompile(`extern\b`)
 var regexp_long_keyword *regexp.Regexp = regexp.MustCompile(`long\b`)
-var regexp_long_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+)[lL]\b`)
+var regexp_long_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+[lL])[^\w.]`)
 var regexp_signed_keyword *regexp.Regexp = regexp.MustCompile(`signed\b`)
 var regexp_unsigned_keyword *regexp.Regexp = regexp.MustCompile(`unsigned\b`)
-var regexp_unsigned_int_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+)[uU]\b`)
-var regexp_unsigned_long_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+)([lL][uU]|[uU][lL])\b`)
+var regexp_unsigned_int_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+[uU])[^\w.]`)
+var regexp_unsigned_long_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+([lL][uU]|[uU][lL]))[^\w.]`)
+var regexp_double_keyword *regexp.Regexp = regexp.MustCompile(`double\b`)
+var regexp_double_constant *regexp.Regexp = regexp.MustCompile(`(([0-9]*\.[0-9]+|[0-9]+\.?)[Ee][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.)[^\w.]`)
 
 type TokenEnum int
 
@@ -104,6 +111,8 @@ const (
 	UNSIGNED_KEYWORD_TOKEN
 	UNSIGNED_INT_CONSTANT_TOKEN
 	UNSIGNED_LONG_CONSTANT_TOKEN
+	DOUBLE_KEYWORD_TOKEN
+	DOUBLE_CONSTANT_TOKEN
 )
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -154,6 +163,8 @@ var allRegexp = map[TokenEnum]*regexp.Regexp{
 	UNSIGNED_KEYWORD_TOKEN:       regexp_unsigned_keyword,
 	UNSIGNED_INT_CONSTANT_TOKEN:  regexp_unsigned_int_constant,
 	UNSIGNED_LONG_CONSTANT_TOKEN: regexp_unsigned_long_constant,
+	DOUBLE_KEYWORD_TOKEN:         regexp_double_keyword,
+	DOUBLE_CONSTANT_TOKEN:        regexp_double_constant,
 }
 
 var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{
@@ -172,6 +183,7 @@ var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{
 	LONG_KEYWORD_TOKEN:     regexp_long_keyword,
 	SIGNED_KEYWORD_TOKEN:   regexp_signed_keyword,
 	UNSIGNED_KEYWORD_TOKEN: regexp_unsigned_keyword,
+	DOUBLE_KEYWORD_TOKEN:   regexp_double_keyword,
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -206,15 +218,14 @@ func getNextToken(contents string) (newContents string, token Token) {
 	newContents = strings.TrimLeft(contents, " \n\r\t")
 
 	// use the regexp to find the longest match at beginning
-	enum, start, end, groupStart, groupEnd := longestMatchAtStart(newContents)
+	enum, start, end := longestMatchAtStart(newContents)
 	//fmt.Printf("%v %v %v\n", enum, start, end)
 
 	// gather the token info
-	token = Token{word: newContents[groupStart:groupEnd], tokenType: enum}
+	token = Token{word: newContents[start:end], tokenType: enum}
 
 	// remove the word from the beginning of the string
-	textToTrim := newContents[start:end]
-	newContents = strings.TrimPrefix(newContents, textToTrim)
+	newContents = newContents[end:]
 
 	// the regexp for identifiers might also match keywords, keywords should take priority
 	// so switch the enum from identifier to keyword if necessary
@@ -227,7 +238,7 @@ func getNextToken(contents string) (newContents string, token Token) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func longestMatchAtStart(contents string) (TokenEnum, int, int, int, int) {
+func longestMatchAtStart(contents string) (TokenEnum, int, int) {
 	start, end := 0, 0
 	groupStart, groupEnd := 0, 0
 	var detectedTokenType TokenEnum = NONE_TOKEN
@@ -243,7 +254,7 @@ func longestMatchAtStart(contents string) (TokenEnum, int, int, int, int) {
 				start = result[0]
 				end = result[1]
 
-				// save the group if there is one
+				// save group 1 if it was found
 				if len(result) > 2 {
 					groupStart = result[2]
 					groupEnd = result[3]
@@ -252,11 +263,12 @@ func longestMatchAtStart(contents string) (TokenEnum, int, int, int, int) {
 		}
 	}
 
-	if (groupStart == 0) && (groupEnd == 0) {
-		groupStart = start
-		groupEnd = end
+	// send back the group if we found it
+	if groupEnd > 0 {
+		return detectedTokenType, groupStart, groupEnd
+	} else {
+		return detectedTokenType, start, end
 	}
-	return detectedTokenType, start, end, groupStart, groupEnd
 }
 
 /////////////////////////////////////////////////////////////////////////////////
