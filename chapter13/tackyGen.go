@@ -97,6 +97,34 @@ type Zero_Extend_Instruction_Tacky struct {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+type Double_To_Int_Instruction_Tacky struct {
+	src Value_Tacky
+	dst Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Double_To_UInt_Instruction_Tacky struct {
+	src Value_Tacky
+	dst Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Int_To_Double_Instruction_Tacky struct {
+	src Value_Tacky
+	dst Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type UInt_To_Double_Instruction_Tacky struct {
+	src Value_Tacky
+	dst Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 type Unary_Instruction_Tacky struct {
 	unOp UnaryOperatorType
 	src  Value_Tacky
@@ -524,27 +552,49 @@ func (exp *Variable_Expression) expToTacky(instructions []Instruction_Tacky) (Va
 /////////////////////////////////////////////////////////////////////////////////
 
 func (exp *Cast_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	result, instructions := exp.innerExp.expToTacky(instructions)
+	innerResult, instructions := exp.innerExp.expToTacky(instructions)
 	innerType := getResultType(exp.innerExp)
+
+	// if they are both the same type then nothing more to do
 	if exp.targetType == innerType {
-		return result, instructions
+		return innerResult, instructions
 	}
 
 	dst := makeTackyVariable(exp.targetType)
 	// TODO: update as we add more data types
-	if size(exp.targetType) == size(innerType) {
-		newInstr := Copy_Instruction_Tacky{src: result, dst: &dst}
+	if exp.targetType == DOUBLE_TYPE {
+		if (innerType == INT_TYPE) || (innerType == LONG_TYPE) {
+			newInstr := Int_To_Double_Instruction_Tacky{src: innerResult, dst: &dst}
+			instructions = append(instructions, &newInstr)
+		} else if (innerType == UNSIGNED_INT_TYPE) || (innerType == UNSIGNED_LONG_TYPE) {
+			newInstr := UInt_To_Double_Instruction_Tacky{src: innerResult, dst: &dst}
+			instructions = append(instructions, &newInstr)
+		} else {
+			fail("Cast not supported")
+		}
+	} else if innerType == DOUBLE_TYPE {
+		if (exp.targetType == INT_TYPE) || (exp.targetType == LONG_TYPE) {
+			newInstr := Double_To_Int_Instruction_Tacky{src: innerResult, dst: &dst}
+			instructions = append(instructions, &newInstr)
+		} else if (exp.targetType == UNSIGNED_INT_TYPE) || (exp.targetType == UNSIGNED_LONG_TYPE) {
+			newInstr := Double_To_UInt_Instruction_Tacky{src: innerResult, dst: &dst}
+			instructions = append(instructions, &newInstr)
+		} else {
+			fail("Cast not supported")
+		}
+	} else if size(exp.targetType) == size(innerType) {
+		newInstr := Copy_Instruction_Tacky{src: innerResult, dst: &dst}
 		instructions = append(instructions, &newInstr)
 	} else if size(exp.targetType) < size(innerType) {
-		newInstr := Truncate_Instruction_Tacky{src: result, dst: &dst}
+		newInstr := Truncate_Instruction_Tacky{src: innerResult, dst: &dst}
 		instructions = append(instructions, &newInstr)
 	} else if isSigned(innerType) {
 		// the target type is bigger, do a sign extend since the inner type is signed
-		newInstr := Sign_Extend_Instruction_Tacky{src: result, dst: &dst}
+		newInstr := Sign_Extend_Instruction_Tacky{src: innerResult, dst: &dst}
 		instructions = append(instructions, &newInstr)
 	} else {
 		// the target type is bigger, do a zero extend since the inner type is unsigned
-		newInstr := Zero_Extend_Instruction_Tacky{src: result, dst: &dst}
+		newInstr := Zero_Extend_Instruction_Tacky{src: innerResult, dst: &dst}
 		instructions = append(instructions, &newInstr)
 	}
 
