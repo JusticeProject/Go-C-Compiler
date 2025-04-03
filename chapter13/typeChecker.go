@@ -11,6 +11,7 @@ const (
 	INITIAL_LONG
 	INITIAL_UNSIGNED_INT
 	INITIAL_UNSIGNED_LONG
+	INITIAL_DOUBLE
 )
 
 func dataTypeEnumToInitEnum(input DataTypeEnum) InitializerEnum {
@@ -23,6 +24,8 @@ func dataTypeEnumToInitEnum(input DataTypeEnum) InitializerEnum {
 		return INITIAL_UNSIGNED_INT
 	case UNSIGNED_LONG_TYPE:
 		return INITIAL_UNSIGNED_LONG
+	case DOUBLE_TYPE:
+		return INITIAL_DOUBLE
 	}
 
 	fail("Can't convert DataTypeEnum to InitializerEnum")
@@ -143,6 +146,9 @@ func isSigned(typ DataTypeEnum) bool {
 		return false
 	case UNSIGNED_LONG_TYPE:
 		return false
+	case DOUBLE_TYPE:
+		// TODO:
+		return false
 	}
 	fail("Can't determine signedness")
 	return false
@@ -153,6 +159,10 @@ func isSigned(typ DataTypeEnum) bool {
 func getCommonType(typ1 DataTypeEnum, typ2 DataTypeEnum) DataTypeEnum {
 	if typ1 == typ2 {
 		return typ1
+	}
+
+	if (typ1 == DOUBLE_TYPE) || (typ2 == DOUBLE_TYPE) {
+		return DOUBLE_TYPE
 	}
 
 	if size(typ1) == size(typ2) {
@@ -275,17 +285,16 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) Variable_Declaration {
 		// TODO: update this when more types are available, and the else if below.
 		// We don't want to initialize a variable twice because the two values could be conflicting,
 		// so if both decl's initialize then throw an error.
-		if (oldDecl.initEnum == INITIAL_INT) || (oldDecl.initEnum == INITIAL_LONG) ||
-			(oldDecl.initEnum == INITIAL_UNSIGNED_INT) || (oldDecl.initEnum == INITIAL_UNSIGNED_LONG) {
+		if (oldDecl.initEnum == INITIAL_INT) || (oldDecl.initEnum == INITIAL_LONG) || (oldDecl.initEnum == INITIAL_UNSIGNED_INT) ||
+			(oldDecl.initEnum == INITIAL_UNSIGNED_LONG) || (oldDecl.initEnum == INITIAL_DOUBLE) {
 			if initEnum == oldDecl.initEnum {
 				fail("Conflicting file scope variable declarations")
 			} else {
 				initEnum = oldDecl.initEnum
 				initialValue = oldDecl.initialValue
 			}
-		} else if (initEnum != INITIAL_INT) && (initEnum != INITIAL_LONG) &&
-			(initEnum != INITIAL_UNSIGNED_INT) && (initEnum != INITIAL_UNSIGNED_LONG) &&
-			(oldDecl.initEnum == TENTATIVE_INIT) {
+		} else if (initEnum != INITIAL_INT) && (initEnum != INITIAL_LONG) && (initEnum != INITIAL_UNSIGNED_INT) &&
+			(initEnum != INITIAL_UNSIGNED_LONG) && (initEnum != INITIAL_DOUBLE) && (oldDecl.initEnum == TENTATIVE_INIT) {
 			initEnum = TENTATIVE_INIT
 		}
 	}
@@ -470,6 +479,9 @@ func typeCheckExpression(exp Expression) Expression {
 		return setResultType(&newCast, convertedExp.targetType)
 	case *Unary_Expression:
 		newInner := typeCheckExpression(convertedExp.innerExp)
+		if (convertedExp.unOp == COMPLEMENT_OPERATOR) && (getResultType(newInner) == DOUBLE_TYPE) {
+			fail("Can't take the bitwise complement of a double")
+		}
 		newUnary := Unary_Expression{unOp: convertedExp.unOp, innerExp: newInner}
 		if convertedExp.unOp == NOT_OPERATOR {
 			return setResultType(&newUnary, INT_TYPE)
@@ -479,6 +491,11 @@ func typeCheckExpression(exp Expression) Expression {
 	case *Binary_Expression:
 		newFirstExp := typeCheckExpression(convertedExp.firstExp)
 		newSecExp := typeCheckExpression(convertedExp.secExp)
+		if convertedExp.binOp == REMAINDER_OPERATOR {
+			if (getResultType(newFirstExp) == DOUBLE_TYPE) || (getResultType(newSecExp) == DOUBLE_TYPE) {
+				fail("Can't take the remainder using doubles")
+			}
+		}
 		if (convertedExp.binOp == AND_OPERATOR) || (convertedExp.binOp == OR_OPERATOR) {
 			newBinExp := Binary_Expression{binOp: convertedExp.binOp, firstExp: newFirstExp, secExp: newSecExp}
 			return setResultType(&newBinExp, INT_TYPE)
