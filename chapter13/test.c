@@ -1,10 +1,10 @@
-unsigned long sum(unsigned long a, unsigned long b);
+int scale(int input, double scaleFactor);
 
 int main(void) {
-    unsigned long result = sum(9UL, (unsigned long)2);
+    result = scale(6, 1.51);
     return result;
 }
 
-unsigned long sum(unsigned long a, unsigned long b) {
-    return a + b;
+int scale(int input, double scaleFactor) {
+    return input * scaleFactor;
 }

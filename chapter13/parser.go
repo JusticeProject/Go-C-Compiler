@@ -72,6 +72,7 @@ const (
 	LONG_TYPE
 	UNSIGNED_INT_TYPE
 	UNSIGNED_LONG_TYPE
+	DOUBLE_TYPE
 	FUNCTION_TYPE
 )
 
@@ -481,6 +482,8 @@ func isSpecifier(token Token) bool {
 		return true
 	case UNSIGNED_KEYWORD_TOKEN:
 		return true
+	case DOUBLE_KEYWORD_TOKEN:
+		return true
 	case STATIC_KEYWORD_TOKEN:
 		return true
 	case EXTERN_KEYWORD_TOKEN:
@@ -538,6 +541,13 @@ func analyzeType(specifiers []TokenEnum) DataTypeEnum {
 		fail("Can't use both signed and unsigned specifiers")
 	}
 
+	if isSpecifierInList(DOUBLE_KEYWORD_TOKEN, specifiers) {
+		if len(specifiers) == 1 {
+			return DOUBLE_TYPE
+		} else {
+			fail("Can't combine 'double' with other type specifiers")
+		}
+	}
 	if isSpecifierInList(UNSIGNED_KEYWORD_TOKEN, specifiers) && isSpecifierInList(LONG_KEYWORD_TOKEN, specifiers) {
 		return UNSIGNED_LONG_TYPE
 	}
@@ -562,6 +572,8 @@ func isDataTypeKeyword(token TokenEnum) bool {
 	case SIGNED_KEYWORD_TOKEN:
 		return true
 	case UNSIGNED_KEYWORD_TOKEN:
+		return true
+	case DOUBLE_KEYWORD_TOKEN:
 		return true
 	default:
 		return false
@@ -952,6 +964,8 @@ func constantTokenToDataType(token Token) DataTypeEnum {
 		return UNSIGNED_INT_TYPE
 	case UNSIGNED_LONG_CONSTANT_TOKEN:
 		return UNSIGNED_LONG_TYPE
+	case DOUBLE_CONSTANT_TOKEN:
+		return DOUBLE_TYPE
 	default:
 		return NONE_TYPE
 	}
@@ -960,7 +974,8 @@ func constantTokenToDataType(token Token) DataTypeEnum {
 /////////////////////////////////////////////////////////////////////////////////
 
 func parseConstantValue(tokens []Token) (string, DataTypeEnum, []Token) {
-	allowedTokens := []TokenEnum{INT_CONSTANT_TOKEN, LONG_CONSTANT_TOKEN, UNSIGNED_INT_CONSTANT_TOKEN, UNSIGNED_LONG_CONSTANT_TOKEN}
+	allowedTokens := []TokenEnum{INT_CONSTANT_TOKEN, LONG_CONSTANT_TOKEN, UNSIGNED_INT_CONSTANT_TOKEN,
+		UNSIGNED_LONG_CONSTANT_TOKEN, DOUBLE_CONSTANT_TOKEN}
 	currentToken, tokens := expectMultiple(allowedTokens, tokens)
 
 	dataTyp := constantTokenToDataType(currentToken)
@@ -984,6 +999,13 @@ func parseConstantValue(tokens []Token) (string, DataTypeEnum, []Token) {
 		if (dataTyp == UNSIGNED_INT_TYPE) && (integer > math.MaxUint32) {
 			dataTyp = UNSIGNED_LONG_TYPE
 		}
+	} else if dataTyp == DOUBLE_TYPE {
+		value, err := strconv.ParseFloat(currentToken.word, 64)
+		if err != nil {
+			fail("Could not parse double:", err.Error())
+		}
+		// change it back to a string for later usage, thus ParseFloat and FormatFloat do the rounding for us
+		currentToken.word = strconv.FormatFloat(value, 'G', -1, 64)
 	}
 
 	return currentToken.word, dataTyp, tokens
