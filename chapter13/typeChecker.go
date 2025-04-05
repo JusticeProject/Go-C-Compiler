@@ -510,6 +510,7 @@ func typeCheckExpression(exp Expression) Expression {
 			(convertedExp.binOp == DIVIDE_OPERATOR) || (convertedExp.binOp == REMAINDER_OPERATOR) {
 			return setResultType(&newBinExp, commonTyp)
 		} else {
+			// comparisons (less than, equal, etc. have a type of int)
 			return setResultType(&newBinExp, INT_TYPE)
 		}
 	case *Assignment_Expression:

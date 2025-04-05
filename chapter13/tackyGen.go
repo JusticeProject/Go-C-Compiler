@@ -19,11 +19,9 @@ func makeTempVarName(prefix string) string {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-var labelCounter int64 = -1
-
 func makeLabelName(name string) string {
-	labelCounter++
-	return name + strconv.FormatInt(labelCounter, 10)
+	tempVarCounter++
+	return name + strconv.FormatInt(tempVarCounter, 10)
 }
 
 //###############################################################################
