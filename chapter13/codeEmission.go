@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -9,7 +10,7 @@ import (
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func truncateToInteger(input string) string {
+func truncateDoubleToInteger(input string) string {
 	if strings.Contains(input, ".") || strings.Contains(input, "e") || strings.Contains(input, "E") {
 		double, err := strconv.ParseFloat(input, 64)
 		if err != nil {
@@ -21,6 +22,22 @@ func truncateToInteger(input string) string {
 		// it wasn't in floating point format, so just return it as-is
 		return input
 	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func roundDouble(input string) string {
+	value, err := strconv.ParseFloat(input, 64)
+	if err != nil {
+		if (value == math.Inf(1)) || (value == math.Inf(-1)) {
+			fmt.Println("Warning:", input, "rounded to", value)
+		} else {
+			fail("Could not parse double:", err.Error())
+		}
+	}
+	// Go does the rounding for us when we call ParseFloat and then FormatFloat
+	result := strconv.FormatFloat(value, 'G', 24, 64)
+	return result
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -77,12 +94,13 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 	typStr := ""
 	if (st.initEnum == INITIAL_INT) || (st.initEnum == INITIAL_UNSIGNED_INT) {
 		typStr = ".long "
-		st.initialValue = truncateToInteger(st.initialValue)
+		st.initialValue = truncateDoubleToInteger(st.initialValue)
 	} else if (st.initEnum == INITIAL_LONG) || (st.initEnum == INITIAL_UNSIGNED_LONG) {
 		typStr = ".quad "
-		st.initialValue = truncateToInteger(st.initialValue)
+		st.initialValue = truncateDoubleToInteger(st.initialValue)
 	} else if st.initEnum == INITIAL_DOUBLE {
 		typStr = ".double "
+		st.initialValue = roundDouble(st.initialValue)
 	}
 
 	if (st.initialValue == "0") && (st.initEnum != INITIAL_DOUBLE) {
@@ -107,6 +125,7 @@ func (st *Static_Constant_Asm) topLevelEmitAsm(file *os.File) {
 		file.WriteString("\t" + ".section\t.rodata" + "\n")
 		file.WriteString("\t" + ".align " + alignStr + "\n")
 		file.WriteString(st.name + ":\n")
+		st.initialValue = roundDouble(st.initialValue)
 		file.WriteString("\t" + ".double " + st.initialValue + "\n")
 	} else {
 		fail("Static_Constant_Asm currently only supports doubles")
@@ -311,7 +330,7 @@ func getBinaryOperatorString(binOp BinaryOperatorTypeAsm, asmTyp AssemblyTypeEnu
 
 func (op *Immediate_Int_Operand_Asm) getOperandString(asmTyp AssemblyTypeEnum) string {
 	// TODO: truncate the value since it could be in floating point format??
-	// use helper function truncateToInteger()??
+	// use helper function truncateDoubleToInteger()??
 	return "$" + op.value
 }
 
