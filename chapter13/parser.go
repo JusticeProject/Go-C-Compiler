@@ -1002,7 +1002,11 @@ func parseConstantValue(tokens []Token) (string, DataTypeEnum, []Token) {
 	} else if dataTyp == DOUBLE_TYPE {
 		value, err := strconv.ParseFloat(currentToken.word, 64)
 		if err != nil {
-			fail("Could not parse double:", err.Error())
+			if (value == math.Inf(1)) || (value == math.Inf(-1)) {
+				fmt.Println("Warning:", currentToken.word, "rounded to", value)
+			} else {
+				fail("Could not parse double:", err.Error())
+			}
 		}
 		// change it back to a string for later usage, thus ParseFloat and FormatFloat do the rounding for us
 		currentToken.word = strconv.FormatFloat(value, 'G', -1, 64)

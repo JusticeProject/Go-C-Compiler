@@ -231,8 +231,10 @@ func (s *If_Statement) getPrettyPrintLines() []string {
 	lines = append(lines, moreLines...)
 	lines = append(lines, "then=")
 	moreLines = s.thenSt.getPrettyPrintLines()
-	moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
-	lines = append(lines, moreLines...)
+	if len(moreLines) > 0 {
+		moreLines[len(moreLines)-1] = moreLines[len(moreLines)-1] + ","
+		lines = append(lines, moreLines...)
+	}
 	lines = append(lines, "else=")
 	if s.elseSt != nil {
 		moreLines = s.elseSt.getPrettyPrintLines()
