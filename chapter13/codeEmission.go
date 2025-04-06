@@ -4,7 +4,24 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func truncateToInteger(input string) string {
+	if strings.Contains(input, ".") || strings.Contains(input, "e") || strings.Contains(input, "E") {
+		double, err := strconv.ParseFloat(input, 64)
+		if err != nil {
+			fail("Failed to convert double to integer:", err.Error())
+		}
+		integer := int64(double)
+		return strconv.FormatInt(integer, 10)
+	} else {
+		// it wasn't in floating point format, so just return it as-is
+		return input
+	}
+}
 
 /////////////////////////////////////////////////////////////////////////////////
 
@@ -60,11 +77,15 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 	typStr := ""
 	if (st.initEnum == INITIAL_INT) || (st.initEnum == INITIAL_UNSIGNED_INT) {
 		typStr = ".long "
+		st.initialValue = truncateToInteger(st.initialValue)
 	} else if (st.initEnum == INITIAL_LONG) || (st.initEnum == INITIAL_UNSIGNED_LONG) {
 		typStr = ".quad "
+		st.initialValue = truncateToInteger(st.initialValue)
+	} else if st.initEnum == INITIAL_DOUBLE {
+		typStr = ".double "
 	}
 
-	if st.initialValue == "0" {
+	if (st.initialValue == "0") && (st.initEnum != INITIAL_DOUBLE) {
 		file.WriteString("\t" + ".bss" + "\n")
 		file.WriteString("\t" + ".align " + alignStr + "\n")
 		file.WriteString(st.name + ":\n")
@@ -74,6 +95,21 @@ func (st *Static_Variable_Asm) topLevelEmitAsm(file *os.File) {
 		file.WriteString("\t" + ".align " + alignStr + "\n")
 		file.WriteString(st.name + ":\n")
 		file.WriteString("\t" + typStr + st.initialValue + "\n")
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (st *Static_Constant_Asm) topLevelEmitAsm(file *os.File) {
+	alignStr := strconv.FormatInt(int64(st.alignment), 10)
+
+	if st.initEnum == INITIAL_DOUBLE {
+		file.WriteString("\t" + ".section\t.rodata" + "\n")
+		file.WriteString("\t" + ".align " + alignStr + "\n")
+		file.WriteString(st.name + ":\n")
+		file.WriteString("\t" + ".double " + st.initialValue + "\n")
+	} else {
+		fail("Static_Constant_Asm currently only supports doubles")
 	}
 }
 
@@ -101,6 +137,20 @@ func (instr *Move_Zero_Extend_Instruction_Asm) instrEmitAsm(file *os.File) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (instr *Cvttsd2si_Double_To_Int_Instruction_Asm) instrEmitAsm(file *os.File) {
+	file.WriteString("\t" + "cvttsd2si" + getInstructionSuffix(instr.dstAsmType) + "\t" +
+		instr.src.getOperandString(instr.dstAsmType) + ", " + instr.dst.getOperandString(instr.dstAsmType) + "\n")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (instr *Cvtsi2sd_Int_To_Double_Instruction_Asm) instrEmitAsm(file *os.File) {
+	file.WriteString("\t" + "cvtsi2sd" + getInstructionSuffix(instr.srcAsmType) + "\t" +
+		instr.src.getOperandString(instr.srcAsmType) + ", " + instr.dst.getOperandString(instr.srcAsmType) + "\n")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (instr *Unary_Instruction_Asm) instrEmitAsm(file *os.File) {
 	file.WriteString("\t" + getUnaryOperatorString(instr.unOp) + getInstructionSuffix(instr.asmTyp) + "\t" +
 		instr.src.getOperandString(instr.asmTyp) + "\n")
@@ -109,14 +159,20 @@ func (instr *Unary_Instruction_Asm) instrEmitAsm(file *os.File) {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Binary_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + getBinaryOperatorString(instr.binOp) + getInstructionSuffix(instr.asmTyp) + "\t" +
+	file.WriteString("\t" + getBinaryOperatorString(instr.binOp, instr.asmTyp) + "\t" +
 		instr.src.getOperandString(instr.asmTyp) + ", " + instr.dst.getOperandString(instr.asmTyp) + "\n")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Compare_Instruction_Asm) instrEmitAsm(file *os.File) {
-	file.WriteString("\t" + "cmp" + getInstructionSuffix(instr.asmTyp) + "\t" +
+	var cmpStr string
+	if instr.asmTyp == DOUBLE_ASM_TYPE {
+		cmpStr = "comi"
+	} else {
+		cmpStr = "cmp"
+	}
+	file.WriteString("\t" + cmpStr + getInstructionSuffix(instr.asmTyp) + "\t" +
 		instr.op1.getOperandString(instr.asmTyp) + ", " + instr.op2.getOperandString(instr.asmTyp) + "\n")
 }
 
@@ -205,6 +261,8 @@ func getUnaryOperatorString(unOp UnaryOperatorTypeAsm) string {
 		return "neg"
 	case NOT_OPERATOR_ASM:
 		return "not"
+	case SHIFT_RIGHT_OPERATOR_ASM:
+		return "shr"
 	default:
 		fail("unknown unary operator")
 	}
@@ -216,14 +274,30 @@ func getUnaryOperatorString(unOp UnaryOperatorTypeAsm) string {
 //###############################################################################
 //###############################################################################
 
-func getBinaryOperatorString(binOp BinaryOperatorTypeAsm) string {
+func getBinaryOperatorString(binOp BinaryOperatorTypeAsm, asmTyp AssemblyTypeEnum) string {
 	switch binOp {
 	case ADD_OPERATOR_ASM:
-		return "add"
+		return "add" + getInstructionSuffix(asmTyp)
 	case SUB_OPERATOR_ASM:
-		return "sub"
+		return "sub" + getInstructionSuffix(asmTyp)
 	case MULT_OPERATOR_ASM:
-		return "imul"
+		if asmTyp == DOUBLE_ASM_TYPE {
+			return "mul" + getInstructionSuffix(asmTyp)
+		} else {
+			return "imul" + getInstructionSuffix(asmTyp)
+		}
+	case DIV_DOUBLE_OPERATOR_ASM:
+		return "div" + getInstructionSuffix(asmTyp)
+	case AND_OPERATOR_ASM:
+		return "and" + getInstructionSuffix(asmTyp)
+	case OR_OPERATOR_ASM:
+		return "or" + getInstructionSuffix(asmTyp)
+	case XOR_OPERATOR_ASM:
+		if asmTyp == DOUBLE_ASM_TYPE {
+			return "xorpd"
+		} else {
+			return "xor" + getInstructionSuffix(asmTyp)
+		}
 	default:
 		fail("unknown binary operator")
 	}
@@ -236,6 +310,8 @@ func getBinaryOperatorString(binOp BinaryOperatorTypeAsm) string {
 //###############################################################################
 
 func (op *Immediate_Int_Operand_Asm) getOperandString(asmTyp AssemblyTypeEnum) string {
+	// TODO: truncate the value since it could be in floating point format??
+	// use helper function truncateToInteger()??
 	return "$" + op.value
 }
 
@@ -307,6 +383,8 @@ func getInstructionSuffix(asmTyp AssemblyTypeEnum) string {
 		return "q"
 	case LONGWORD_ASM_TYPE:
 		return "l"
+	case DOUBLE_ASM_TYPE:
+		return "sd"
 	default:
 		fail("unknown AssemblyTypeEnum")
 	}
@@ -337,6 +415,26 @@ func getRegisterString(reg RegisterTypeAsm, asmTyp AssemblyTypeEnum) string {
 		return "r11" + getScratchRegisterSuffix(asmTyp)
 	case SP_REGISTER_ASM:
 		return "rsp"
+	case XMM0_REGISTER_ASM:
+		return "xmm0"
+	case XMM1_REGISTER_ASM:
+		return "xmm1"
+	case XMM2_REGISTER_ASM:
+		return "xmm2"
+	case XMM3_REGISTER_ASM:
+		return "xmm3"
+	case XMM4_REGISTER_ASM:
+		return "xmm4"
+	case XMM5_REGISTER_ASM:
+		return "xmm5"
+	case XMM6_REGISTER_ASM:
+		return "xmm6"
+	case XMM7_REGISTER_ASM:
+		return "xmm7"
+	case XMM14_REGISTER_ASM:
+		return "xmm14"
+	case XMM15_REGISTER_ASM:
+		return "xmm15"
 	default:
 		fail("unknown register")
 	}
