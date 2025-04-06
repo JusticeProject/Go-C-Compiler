@@ -642,8 +642,37 @@ func (instr *Double_To_Int_Instruction_Tacky) instructionToAsm() []Instruction_A
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *Double_To_UInt_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
-	// TODO: page 328 and page 335, also see errata note on website
-	fail("not implemented yet")
+	// page 328 and page 335, also see errata note on website
+	// don't use registers RBX, R10, R11, R12, R13, R14, R15, XMM14, XMM15
+	// can use AX, DX
+	typ := instr.dst.getDataType()
+	if typ == UNSIGNED_INT_TYPE {
+		ax := Register_Operand_Asm{AX_REGISTER_ASM}
+		cvt := Cvttsd2si_Double_To_Int_Instruction_Asm{dstAsmType: QUADWORD_ASM_TYPE, src: instr.src.valueToAsm(), dst: &ax}
+		mov := Mov_Instruction_Asm{asmTyp: LONGWORD_ASM_TYPE, src: &ax, dst: instr.dst.valueToAsm()}
+		return []Instruction_Asm{&cvt, &mov}
+	} else if typ == UNSIGNED_LONG_TYPE {
+		label1 := makeLabelName("label1")
+		label2 := makeLabelName("label2")
+		upBound := addStaticConstant("upper_bound", 8, "9223372036854775808.0", INITIAL_DOUBLE)
+		regX := Register_Operand_Asm{XMM0_REGISTER_ASM}
+
+		cmp := Compare_Instruction_Asm{asmTyp: DOUBLE_ASM_TYPE, op1: &Data_Operand_Asm{upBound}, op2: instr.src.valueToAsm()}
+		jmpC := Jump_Conditional_Instruction_Asm{code: GREATER_OR_EQUAL_CODE_UNSIGNED_ASM, target: label1}
+		cvtt1 := Cvttsd2si_Double_To_Int_Instruction_Asm{dstAsmType: QUADWORD_ASM_TYPE, src: instr.src.valueToAsm(), dst: instr.dst.valueToAsm()}
+		jmp := Jump_Instruction_Asm{label2}
+		lbl1 := Label_Instruction_Asm{label1}
+		mov1 := Mov_Instruction_Asm{asmTyp: DOUBLE_ASM_TYPE, src: instr.src.valueToAsm(), dst: &regX}
+		bin1 := Binary_Instruction_Asm{binOp: SUB_OPERATOR_ASM, asmTyp: DOUBLE_ASM_TYPE, src: &Data_Operand_Asm{upBound}, dst: &regX}
+		cvtt2 := Cvttsd2si_Double_To_Int_Instruction_Asm{dstAsmType: QUADWORD_ASM_TYPE, src: &regX, dst: instr.dst.valueToAsm()}
+		bin2 := Binary_Instruction_Asm{binOp: ADD_OPERATOR_ASM, asmTyp: QUADWORD_ASM_TYPE,
+			src: &Immediate_Int_Operand_Asm{"9223372036854775808"}, dst: instr.dst.valueToAsm()}
+		lbl2 := Label_Instruction_Asm{label2}
+
+		return []Instruction_Asm{&cmp, &jmpC, &cvtt1, &jmp, &lbl1, &mov1, &bin1, &cvtt2, &bin2, &lbl2}
+	}
+
+	fail("Wrong type when converting Double to UInt")
 	return []Instruction_Asm{}
 }
 
@@ -658,8 +687,37 @@ func (instr *Int_To_Double_Instruction_Tacky) instructionToAsm() []Instruction_A
 /////////////////////////////////////////////////////////////////////////////////
 
 func (instr *UInt_To_Double_Instruction_Tacky) instructionToAsm() []Instruction_Asm {
-	// TODO: page 328 and page 335
-	fail("not implemented yet")
+	// page 328 and page 335
+	typ := instr.src.getDataType()
+	if typ == UNSIGNED_INT_TYPE {
+		ax := Register_Operand_Asm{AX_REGISTER_ASM}
+		mov := Move_Zero_Extend_Instruction_Asm{src: instr.src.valueToAsm(), dst: &ax}
+		cvt := Cvtsi2sd_Int_To_Double_Instruction_Asm{srcAsmType: QUADWORD_ASM_TYPE, src: &ax, dst: instr.dst.valueToAsm()}
+		return []Instruction_Asm{&mov, &cvt}
+	} else if typ == UNSIGNED_LONG_TYPE {
+		label1 := makeLabelName("label1")
+		label2 := makeLabelName("label2")
+		reg1 := Register_Operand_Asm{AX_REGISTER_ASM}
+		reg2 := Register_Operand_Asm{DX_REGISTER_ASM}
+
+		cmp := Compare_Instruction_Asm{asmTyp: QUADWORD_ASM_TYPE, op1: &Immediate_Int_Operand_Asm{"0"}, op2: instr.src.valueToAsm()}
+		jmpC := Jump_Conditional_Instruction_Asm{code: LESS_THAN_CODE_ASM, target: label1}
+		cvt1 := Cvtsi2sd_Int_To_Double_Instruction_Asm{srcAsmType: QUADWORD_ASM_TYPE, src: instr.src.valueToAsm(), dst: instr.dst.valueToAsm()}
+		jmp := Jump_Instruction_Asm{label2}
+		lbl1 := Label_Instruction_Asm{label1}
+		mov1 := Mov_Instruction_Asm{asmTyp: QUADWORD_ASM_TYPE, src: instr.src.valueToAsm(), dst: &reg1}
+		mov2 := Mov_Instruction_Asm{asmTyp: QUADWORD_ASM_TYPE, src: &reg1, dst: &reg2}
+		un := Unary_Instruction_Asm{unOp: SHIFT_RIGHT_OPERATOR_ASM, asmTyp: QUADWORD_ASM_TYPE, src: &reg2}
+		bin1 := Binary_Instruction_Asm{binOp: AND_OPERATOR_ASM, asmTyp: QUADWORD_ASM_TYPE, src: &Immediate_Int_Operand_Asm{"1"}, dst: &reg1}
+		bin2 := Binary_Instruction_Asm{binOp: OR_OPERATOR_ASM, asmTyp: QUADWORD_ASM_TYPE, src: &reg1, dst: &reg2}
+		cvt2 := Cvtsi2sd_Int_To_Double_Instruction_Asm{srcAsmType: QUADWORD_ASM_TYPE, src: &reg2, dst: instr.dst.valueToAsm()}
+		bin3 := Binary_Instruction_Asm{binOp: ADD_OPERATOR_ASM, asmTyp: DOUBLE_ASM_TYPE, src: instr.dst.valueToAsm(), dst: instr.dst.valueToAsm()}
+		lbl2 := Label_Instruction_Asm{label2}
+
+		return []Instruction_Asm{&cmp, &jmpC, &cvt1, &jmp, &lbl1, &mov1, &mov2, &un, &bin1, &bin2, &cvt2, &bin3, &lbl2}
+	}
+
+	fail("Wrong type when converting UInt to Double")
 	return []Instruction_Asm{}
 }
 
@@ -968,6 +1026,12 @@ func (val *Constant_Value_Tacky) valueToAsm() Operand_Asm {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (val *Constant_Value_Tacky) getDataType() DataTypeEnum {
+	return val.typ
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (val *Constant_Value_Tacky) getAssemblyType() AssemblyTypeEnum {
 	return dataTypeEnumToAssemblyTypeEnum(val.typ)
 }
@@ -982,6 +1046,13 @@ func (val *Constant_Value_Tacky) isSigned() bool {
 
 func (val *Variable_Value_Tacky) valueToAsm() Operand_Asm {
 	return &Pseudoregister_Operand_Asm{name: val.name}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (val *Variable_Value_Tacky) getDataType() DataTypeEnum {
+	sym := symbolTable[val.name]
+	return sym.dataTyp.typ
 }
 
 /////////////////////////////////////////////////////////////////////////////////
