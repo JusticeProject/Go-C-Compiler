@@ -61,6 +61,7 @@ var regexp_unsigned_int_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+[uU
 var regexp_unsigned_long_constant *regexp.Regexp = regexp.MustCompile(`([0-9]+([lL][uU]|[uU][lL]))[^\w.]`)
 var regexp_double_keyword *regexp.Regexp = regexp.MustCompile(`double\b`)
 var regexp_double_constant *regexp.Regexp = regexp.MustCompile(`(([0-9]*\.[0-9]+|[0-9]+\.?)[Ee][+-]?[0-9]+|[0-9]*\.[0-9]+|[0-9]+\.)[^\w.]`)
+var regexp_ampersand *regexp.Regexp = regexp.MustCompile(`&`)
 
 type TokenEnum int
 
@@ -113,6 +114,7 @@ const (
 	UNSIGNED_LONG_CONSTANT_TOKEN
 	DOUBLE_KEYWORD_TOKEN
 	DOUBLE_CONSTANT_TOKEN
+	AMPERSAND_TOKEN
 )
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -165,6 +167,7 @@ var allRegexp = map[TokenEnum]*regexp.Regexp{
 	UNSIGNED_LONG_CONSTANT_TOKEN: regexp_unsigned_long_constant,
 	DOUBLE_KEYWORD_TOKEN:         regexp_double_keyword,
 	DOUBLE_CONSTANT_TOKEN:        regexp_double_constant,
+	AMPERSAND_TOKEN:              regexp_ampersand,
 }
 
 var allKeywordRegexp = map[TokenEnum]*regexp.Regexp{
