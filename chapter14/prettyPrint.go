@@ -344,7 +344,7 @@ func (s *Null_Statement) getPrettyPrintLines() []string {
 //###############################################################################
 
 func (e *Constant_Value_Expression) getPrettyPrintLines() []string {
-	line := "CONSTANT_VALUE_EXPRESSION_" + getPrettyPrintDataType(e.typ) + "(" + e.value + ")"
+	line := "CONSTANT_VALUE_EXPRESSION_" + getPrettyPrintDataType(e.dTyp.typ) + "(" + e.value + ")"
 	return []string{line}
 }
 
@@ -357,7 +357,7 @@ func (e *Variable_Expression) getPrettyPrintLines() []string {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (e *Cast_Expression) getPrettyPrintLines() []string {
-	lines := []string{"CAST_EXPRESSION_" + getPrettyPrintDataType(e.targetType) + "(", doRightIndent()}
+	lines := []string{"CAST_EXPRESSION_" + getPrettyPrintDataType(e.targetType.typ) + "(", doRightIndent()}
 	moreLines := e.innerExp.getPrettyPrintLines()
 	lines = append(lines, moreLines...)
 	lines = append(lines, doLeftIndent())
@@ -440,6 +440,20 @@ func (e *Function_Call_Expression) getPrettyPrintLines() []string {
 	lines = append(lines, ")")
 
 	return lines
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (e *Dereference_Expression) getPrettyPrintLines() []string {
+	// TODO:
+	return []string{}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (e *Address_Of_Expression) getPrettyPrintLines() []string {
+	// TODO:
+	return []string{}
 }
 
 //###############################################################################

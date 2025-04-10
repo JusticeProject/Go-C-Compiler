@@ -74,6 +74,7 @@ const (
 	UNSIGNED_LONG_TYPE
 	DOUBLE_TYPE
 	FUNCTION_TYPE
+	POINTER_TYPE
 )
 
 type Data_Type struct {
@@ -82,6 +83,9 @@ type Data_Type struct {
 	// for FUNCTION_TYPE
 	paramTypes []*Data_Type
 	returnType *Data_Type
+
+	// for POINTER_TYPE
+	refType *Data_Type
 
 	// TODO: if this struct changes, update isEqualType() also
 }
@@ -107,7 +111,10 @@ func (dt *Data_Type) isEqualType(input *Data_Type) bool {
 			return false
 		}
 	}
-	return dt.returnType.isEqualType(input.returnType)
+	if !dt.returnType.isEqualType(input.returnType) {
+		return false
+	}
+	return dt.refType.isEqualType(input.refType)
 }
 
 //###############################################################################
@@ -223,39 +230,39 @@ type Expression interface {
 }
 
 type Constant_Value_Expression struct {
-	typ       DataTypeEnum
+	dTyp      Data_Type
 	value     string
-	resultTyp DataTypeEnum
+	resultTyp Data_Type
 }
 
 type Variable_Expression struct {
 	name      string
-	resultTyp DataTypeEnum
+	resultTyp Data_Type
 }
 
 type Cast_Expression struct {
-	targetType DataTypeEnum
+	targetType Data_Type
 	innerExp   Expression
-	resultTyp  DataTypeEnum
+	resultTyp  Data_Type
 }
 
 type Unary_Expression struct {
 	unOp      UnaryOperatorType
 	innerExp  Expression
-	resultTyp DataTypeEnum
+	resultTyp Data_Type
 }
 
 type Binary_Expression struct {
 	binOp     BinaryOperatorType
 	firstExp  Expression
 	secExp    Expression
-	resultTyp DataTypeEnum
+	resultTyp Data_Type
 }
 
 type Assignment_Expression struct {
 	lvalue    Expression
 	rightExp  Expression
-	resultTyp DataTypeEnum
+	resultTyp Data_Type
 }
 
 // example: a == 3 ? 1 : 2
@@ -263,13 +270,63 @@ type Conditional_Expression struct {
 	condition Expression
 	middleExp Expression
 	rightExp  Expression
-	resultTyp DataTypeEnum
+	resultTyp Data_Type
 }
 
 type Function_Call_Expression struct {
 	functionName string
 	args         []Expression
-	resultTyp    DataTypeEnum
+	resultTyp    Data_Type
+}
+
+type Dereference_Expression struct {
+	innerExp Expression
+}
+
+type Address_Of_Expression struct {
+	innerExp Expression
+}
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+type Declarator interface {
+	// returns the identifier (name), the derived type, and list of param names (if any)
+	processDeclarator(baseTyp Data_Type) (string, Data_Type, []string)
+}
+
+type Identifier_Declarator struct {
+	name string
+}
+
+type Pointer_Declarator struct {
+	innerDec Declarator
+}
+
+type Function_Declarator struct {
+	paramInfos []Param_Info
+	innerDec   Declarator
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Param_Info struct {
+	dTyp Data_Type
+	dec  Declarator
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Abstract_Declarator interface {
+	processAbstractDeclarator(baseTyp Data_Type) Data_Type
+}
+
+type Abstract_Pointer_Declarator struct {
+	innerDec Abstract_Declarator
+}
+
+type Abstract_Base_Declarator struct {
 }
 
 //###############################################################################
@@ -283,6 +340,8 @@ const (
 	COMPLEMENT_OPERATOR
 	NEGATE_OPERATOR
 	NOT_OPERATOR
+	DEREFERENCE_OPERATOR
+	ADDRESS_OF_OPERATOR
 )
 
 func getUnaryOperator(token Token) UnaryOperatorType {
@@ -293,9 +352,22 @@ func getUnaryOperator(token Token) UnaryOperatorType {
 		return NEGATE_OPERATOR
 	case EXCLAMATION_TOKEN:
 		return NOT_OPERATOR
+	case ASTERISK_TOKEN:
+		return DEREFERENCE_OPERATOR
+	case AMPERSAND_TOKEN:
+		return ADDRESS_OF_OPERATOR
 	}
 
 	return NONE_UNARY_OPERATOR
+}
+
+func isUnaryOperator(token Token) bool {
+	unOp := getUnaryOperator(token)
+	if unOp == NONE_UNARY_OPERATOR {
+		return false
+	} else {
+		return true
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -413,30 +485,25 @@ func parseDeclaration(tokens []Token) (Declaration, []Token) {
 	if len(specifiers) == 0 {
 		return nil, tokens
 	}
-	typ, storageClass := analyzeTypeAndStorageClass(specifiers)
-	name, tokens := parseIdentifier(tokens)
+	baseType, storageClass := analyzeTypeAndStorageClass(specifiers)
+	dec, tokens := parseDeclarator(tokens)
+	name, decType, paramNames := dec.processDeclarator(baseType)
 
-	if peekToken(tokens).tokenType == OPEN_PARENTHESIS_TOKEN {
-		// it's a function declaration or definition
-		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
-		paramNames, paramTypes, tokens := parseParamList(tokens)
-		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
-		funcType := Data_Type{typ: FUNCTION_TYPE, paramTypes: paramTypes, returnType: &Data_Type{typ: typ}}
-
+	if decType.typ == FUNCTION_TYPE {
 		if peekToken(tokens).tokenType == SEMICOLON_TOKEN {
 			// it's a function declaration
 			_, tokens = expect(SEMICOLON_TOKEN, tokens)
-			fn := Function_Declaration{name: name, paramNames: paramNames, body: nil, dTyp: funcType, storageClass: storageClass}
+			fn := Function_Declaration{name: name, paramNames: paramNames, body: nil, dTyp: decType, storageClass: storageClass}
 			return &fn, tokens
 		} else {
 			// it's a function definition
 			block, tokens := parseBlock(tokens)
-			fn := Function_Declaration{name: name, paramNames: paramNames, body: &block, dTyp: funcType, storageClass: storageClass}
+			fn := Function_Declaration{name: name, paramNames: paramNames, body: &block, dTyp: decType, storageClass: storageClass}
 			return &fn, tokens
 		}
 	} else {
 		// it's a variable declaration
-		decl := Variable_Declaration{name: name, dTyp: Data_Type{typ: typ}, storageClass: storageClass}
+		decl := Variable_Declaration{name: name, dTyp: decType, storageClass: storageClass}
 
 		if peekToken(tokens).tokenType == EQUAL_TOKEN {
 			// it has an initializer
@@ -448,6 +515,114 @@ func parseDeclaration(tokens []Token) (Declaration, []Token) {
 		_, tokens = expect(SEMICOLON_TOKEN, tokens)
 		return &decl, tokens
 	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseDeclarator(tokens []Token) (Declarator, []Token) {
+	if peekToken(tokens).tokenType == ASTERISK_TOKEN {
+		// it's a pointer
+		_, tokens = expect(ASTERISK_TOKEN, tokens)
+		dec, tokens := parseDeclarator(tokens)
+		return dec, tokens
+	} else {
+		// it's a direct declarator
+		dec, tokens := parseDirectDeclarator(tokens)
+		return dec, tokens
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseDirectDeclarator(tokens []Token) (Declarator, []Token) {
+	simpleDec, tokens := parseSimpleDeclarator(tokens)
+
+	if peekToken(tokens).tokenType == OPEN_PARENTHESIS_TOKEN {
+		paramInfos, tokens := parseParamList(tokens)
+		funDec := Function_Declarator{paramInfos: paramInfos, innerDec: simpleDec}
+		return &funDec, tokens
+	} else {
+		return simpleDec, tokens
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseSimpleDeclarator(tokens []Token) (Declarator, []Token) {
+	if peekToken(tokens).tokenType == OPEN_PARENTHESIS_TOKEN {
+		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
+		dec, tokens := parseDeclarator(tokens)
+		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+		return dec, tokens
+	} else {
+		name, tokens := parseIdentifier(tokens)
+		identDec := Identifier_Declarator{name}
+		return &identDec, tokens
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (dec *Identifier_Declarator) processDeclarator(baseTyp Data_Type) (string, Data_Type, []string) {
+	return dec.name, baseTyp, []string{}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (dec *Pointer_Declarator) processDeclarator(baseTyp Data_Type) (string, Data_Type, []string) {
+	derivedType := Data_Type{typ: POINTER_TYPE, refType: &baseTyp}
+	return dec.innerDec.processDeclarator(derivedType)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (dec *Function_Declarator) processDeclarator(baseTyp Data_Type) (string, Data_Type, []string) {
+	ident, isIdent := dec.innerDec.(*Identifier_Declarator)
+	if !isIdent {
+		fail("Can't apply additional type derivations to a function type")
+	}
+	paramNames := []string{}
+	paramTypes := []*Data_Type{}
+	for _, paramInfo := range dec.paramInfos {
+		paramName, paramType, _ := paramInfo.dec.processDeclarator(paramInfo.dTyp)
+		if paramType.typ == FUNCTION_TYPE {
+			fail("Function pointers in parameters aren't supported")
+		}
+		paramNames = append(paramNames, paramName)
+		paramTypes = append(paramTypes, &paramType)
+	}
+	derivedType := Data_Type{typ: FUNCTION_TYPE, paramTypes: paramTypes, returnType: &baseTyp}
+	return ident.name, derivedType, paramNames
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func parseAbstractDeclarator(tokens []Token) (Abstract_Declarator, []Token) {
+	if peekToken(tokens).tokenType == ASTERISK_TOKEN {
+		_, tokens = expect(ASTERISK_TOKEN, tokens)
+		innerDec, tokens := parseAbstractDeclarator(tokens)
+		return &Abstract_Pointer_Declarator{innerDec}, tokens
+	} else if peekToken(tokens).tokenType == OPEN_PARENTHESIS_TOKEN {
+		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
+		innerDec, tokens := parseAbstractDeclarator(tokens)
+		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+		return &Abstract_Pointer_Declarator{innerDec}, tokens
+	} else {
+		return &Abstract_Base_Declarator{}, tokens
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (absDec *Abstract_Pointer_Declarator) processAbstractDeclarator(baseTyp Data_Type) Data_Type {
+	derivedType := Data_Type{typ: POINTER_TYPE, refType: &baseTyp}
+	return absDec.innerDec.processAbstractDeclarator(derivedType)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (absDec *Abstract_Base_Declarator) processAbstractDeclarator(baseTyp Data_Type) Data_Type {
+	return baseTyp
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -530,7 +705,7 @@ func hasDuplicateSpecifier(specifiers []TokenEnum) bool {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func analyzeType(specifiers []TokenEnum) DataTypeEnum {
+func analyzeType(specifiers []TokenEnum) Data_Type {
 	if len(specifiers) == 0 {
 		fail("Missing type specifier")
 	}
@@ -543,22 +718,22 @@ func analyzeType(specifiers []TokenEnum) DataTypeEnum {
 
 	if isSpecifierInList(DOUBLE_KEYWORD_TOKEN, specifiers) {
 		if len(specifiers) == 1 {
-			return DOUBLE_TYPE
+			return Data_Type{typ: DOUBLE_TYPE}
 		} else {
 			fail("Can't combine 'double' with other type specifiers")
 		}
 	}
 	if isSpecifierInList(UNSIGNED_KEYWORD_TOKEN, specifiers) && isSpecifierInList(LONG_KEYWORD_TOKEN, specifiers) {
-		return UNSIGNED_LONG_TYPE
+		return Data_Type{typ: UNSIGNED_LONG_TYPE}
 	}
 	if isSpecifierInList(UNSIGNED_KEYWORD_TOKEN, specifiers) {
-		return UNSIGNED_INT_TYPE
+		return Data_Type{typ: UNSIGNED_INT_TYPE}
 	}
 	if isSpecifierInList(LONG_KEYWORD_TOKEN, specifiers) {
-		return LONG_TYPE
+		return Data_Type{typ: LONG_TYPE}
 	}
 
-	return INT_TYPE
+	return Data_Type{typ: INT_TYPE}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -582,7 +757,7 @@ func isDataTypeKeyword(token TokenEnum) bool {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func analyzeTypeAndStorageClass(specifiers []TokenEnum) (DataTypeEnum, StorageClassEnum) {
+func analyzeTypeAndStorageClass(specifiers []TokenEnum) (Data_Type, StorageClassEnum) {
 	types := []TokenEnum{}
 	storageClasses := []TokenEnum{}
 	for _, spec := range specifiers {
@@ -593,7 +768,7 @@ func analyzeTypeAndStorageClass(specifiers []TokenEnum) (DataTypeEnum, StorageCl
 		}
 	}
 
-	typ := analyzeType(types)
+	dTyp := analyzeType(types)
 
 	if len(storageClasses) > 1 {
 		fail("Invalid storage class")
@@ -604,14 +779,15 @@ func analyzeTypeAndStorageClass(specifiers []TokenEnum) (DataTypeEnum, StorageCl
 		storageClass = getStorageClass(storageClasses[0])
 	}
 
-	return typ, storageClass
+	return dTyp, storageClass
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func parseParamList(tokens []Token) ([]string, []*Data_Type, []Token) {
-	paramNames := []string{}
-	paramTypes := []*Data_Type{}
+func parseParamList(tokens []Token) ([]Param_Info, []Token) {
+	paramInfos := []Param_Info{}
+
+	_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
 
 	if peekToken(tokens).tokenType == VOID_KEYWORD_TOKEN {
 		// there are no params
@@ -622,13 +798,16 @@ func parseParamList(tokens []Token) ([]string, []*Data_Type, []Token) {
 			// get the type, static and extern are not allowed for params
 			var specifiers []TokenEnum
 			specifiers, tokens = parseSpecifiers(tokens, false)
-			typ := analyzeType(specifiers)
-			paramTypes = append(paramTypes, &Data_Type{typ: typ})
+			dTyp := analyzeType(specifiers)
 
 			// get the name
 			var id string
 			id, tokens = parseIdentifier(tokens)
-			paramNames = append(paramNames, id)
+
+			// add it to the list
+			paramInfo := Param_Info{dTyp: dTyp, dec: &Identifier_Declarator{id}}
+			paramInfos = append(paramInfos, paramInfo)
+
 			if peekToken(tokens).tokenType == COMMA_TOKEN {
 				_, tokens = expect(COMMA_TOKEN, tokens)
 				foundComma = true
@@ -638,7 +817,9 @@ func parseParamList(tokens []Token) ([]string, []*Data_Type, []Token) {
 		}
 	}
 
-	return paramNames, paramTypes, tokens
+	_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
+
+	return paramInfos, tokens
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -883,7 +1064,7 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 
 	if constantTokenToDataType(nextToken) != NONE_TYPE {
 		value, typ, tokens := parseConstantValue(tokens)
-		ex := Constant_Value_Expression{typ: typ, value: value}
+		ex := Constant_Value_Expression{dTyp: Data_Type{typ: typ}, value: value}
 		return &ex, tokens
 	} else if nextToken.tokenType == IDENTIFIER_TOKEN {
 		name, tokens := parseIdentifier(tokens)
@@ -899,9 +1080,10 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 			v := Variable_Expression{name: name}
 			return &v, tokens
 		}
-	} else if nextToken.tokenType == TILDE_TOKEN || nextToken.tokenType == HYPHEN_TOKEN || nextToken.tokenType == EXCLAMATION_TOKEN {
+	} else if isUnaryOperator(nextToken) {
 		unopType, tokens := parseUnaryOperator(tokens)
 		innerExp, tokens := parseFactor(tokens)
+		// TODO: if asterisk or ampersand, return deref or address_of, else return Unary_Expression
 		unExp := Unary_Expression{innerExp: innerExp, unOp: unopType}
 		return &unExp, tokens
 	} else if nextToken.tokenType == OPEN_PARENTHESIS_TOKEN {
@@ -909,10 +1091,12 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 		if isDataTypeKeyword(peekToken(tokens).tokenType) {
 			// must be a cast expression
 			specifiers, tokens := parseSpecifiers(tokens, false)
-			typ := analyzeType(specifiers)
+			baseTyp := analyzeType(specifiers)
+			absDec, tokens := parseAbstractDeclarator(tokens)
+			derivedTyp := absDec.processAbstractDeclarator(baseTyp)
 			_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
 			exp, tokens := parseFactor(tokens)
-			cast := Cast_Expression{targetType: typ, innerExp: exp}
+			cast := Cast_Expression{targetType: derivedTyp, innerExp: exp}
 			return &cast, tokens
 		} else {
 			// must be another expression within parentheses

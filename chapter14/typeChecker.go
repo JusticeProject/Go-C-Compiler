@@ -60,31 +60,31 @@ var symbolTable = make(map[string]Symbol)
 //###############################################################################
 //###############################################################################
 
-func setResultType(exp Expression, typ DataTypeEnum) Expression {
+func setResultType(exp Expression, dTyp Data_Type) Expression {
 	switch convertedExp := exp.(type) {
 	case *Constant_Value_Expression:
-		convertedExp.resultTyp = typ
+		convertedExp.resultTyp = dTyp
 		return convertedExp
 	case *Variable_Expression:
-		convertedExp.resultTyp = typ
+		convertedExp.resultTyp = dTyp
 		return convertedExp
 	case *Cast_Expression:
-		convertedExp.resultTyp = typ
+		convertedExp.resultTyp = dTyp
 		return convertedExp
 	case *Unary_Expression:
-		convertedExp.resultTyp = typ
+		convertedExp.resultTyp = dTyp
 		return convertedExp
 	case *Binary_Expression:
-		convertedExp.resultTyp = typ
+		convertedExp.resultTyp = dTyp
 		return convertedExp
 	case *Assignment_Expression:
-		convertedExp.resultTyp = typ
+		convertedExp.resultTyp = dTyp
 		return convertedExp
 	case *Conditional_Expression:
-		convertedExp.resultTyp = typ
+		convertedExp.resultTyp = dTyp
 		return convertedExp
 	case *Function_Call_Expression:
-		convertedExp.resultTyp = typ
+		convertedExp.resultTyp = dTyp
 		return convertedExp
 	default:
 		fail("Unknown Expression in setResultType")
@@ -94,7 +94,7 @@ func setResultType(exp Expression, typ DataTypeEnum) Expression {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func getResultType(exp Expression) DataTypeEnum {
+func getResultType(exp Expression) Data_Type {
 	switch convertedExp := exp.(type) {
 	case *Constant_Value_Expression:
 		return convertedExp.resultTyp
@@ -115,13 +115,14 @@ func getResultType(exp Expression) DataTypeEnum {
 	default:
 		fail("Unknown Expression in getResultType")
 	}
-	return NONE_TYPE
+	return Data_Type{typ: NONE_TYPE}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func convertToType(exp Expression, newTyp DataTypeEnum) Expression {
-	if getResultType(exp) == newTyp {
+func convertToType(exp Expression, newTyp Data_Type) Expression {
+	res := getResultType(exp)
+	if res.isEqualType(&newTyp) {
 		return exp
 	}
 	castExp := Cast_Expression{targetType: newTyp, innerExp: exp}
@@ -156,24 +157,24 @@ func isSigned(typ DataTypeEnum) bool {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func getCommonType(typ1 DataTypeEnum, typ2 DataTypeEnum) DataTypeEnum {
-	if typ1 == typ2 {
+func getCommonType(typ1 Data_Type, typ2 Data_Type) Data_Type {
+	if typ1.isEqualType(&typ2) {
 		return typ1
 	}
 
-	if (typ1 == DOUBLE_TYPE) || (typ2 == DOUBLE_TYPE) {
-		return DOUBLE_TYPE
+	if (typ1.typ == DOUBLE_TYPE) || (typ2.typ == DOUBLE_TYPE) {
+		return Data_Type{typ: DOUBLE_TYPE}
 	}
 
-	if size(typ1) == size(typ2) {
-		if isSigned(typ1) {
+	if size(typ1.typ) == size(typ2.typ) {
+		if isSigned(typ1.typ) {
 			return typ2
 		} else {
 			return typ1
 		}
 	}
 
-	if size(typ1) > size(typ2) {
+	if size(typ1.typ) > size(typ2.typ) {
 		return typ1
 	} else {
 		return typ2
@@ -254,7 +255,7 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) Variable_Declaration {
 	constValExp, isConst := decl.initializer.(*Constant_Value_Expression)
 	if isConst {
 		initEnum = dataTypeEnumToInitEnum(decl.dTyp.typ)
-		decl.initializer = convertToType(decl.initializer, decl.dTyp.typ)
+		decl.initializer = convertToType(decl.initializer, decl.dTyp)
 		// TODO: if the constant value is a long that doesn't fit into an int (2147483650L) then
 		// strconv.ParseInt(value, 10, 64), then cast int64 to int32 (for example), then back to string
 		// I tested this and the assembler will truncate it for me.
@@ -327,7 +328,7 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) Variable_Declaration {
 		constValExp, isConstVal := decl.initializer.(*Constant_Value_Expression)
 		if isConstVal {
 			initEnum = dataTypeEnumToInitEnum(decl.dTyp.typ)
-			decl.initializer = convertToType(decl.initializer, decl.dTyp.typ)
+			decl.initializer = convertToType(decl.initializer, decl.dTyp)
 			// TODO:
 			// if the constant value is a long that doesn't fit into an int (2147483650L) then
 			// strconv.ParseInt(value, 10, 64), then cast int64 to int32 (for example), then back to string
@@ -345,7 +346,7 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) Variable_Declaration {
 		symbolTable[decl.name] = Symbol{dataTyp: decl.dTyp, attrs: LOCAL_ATTRIBUTES}
 		if decl.initializer != nil {
 			decl.initializer = typeCheckExpression(decl.initializer)
-			decl.initializer = convertToType(decl.initializer, decl.dTyp.typ)
+			decl.initializer = convertToType(decl.initializer, decl.dTyp)
 		}
 	}
 
@@ -394,8 +395,8 @@ func typeCheckStatement(st Statement, funcName string) Statement {
 	switch convertedSt := st.(type) {
 	case *Return_Statement:
 		convertedSt.exp = typeCheckExpression(convertedSt.exp)
-		retType := symbolTable[funcName].dataTyp.returnType.typ
-		convertedSt.exp = convertToType(convertedSt.exp, retType)
+		retType := symbolTable[funcName].dataTyp.returnType
+		convertedSt.exp = convertToType(convertedSt.exp, *retType)
 		return convertedSt
 	case *Expression_Statement:
 		convertedSt.exp = typeCheckExpression(convertedSt.exp)
@@ -466,25 +467,25 @@ func typeCheckExpression(exp Expression) Expression {
 
 	switch convertedExp := exp.(type) {
 	case *Constant_Value_Expression:
-		return setResultType(convertedExp, convertedExp.typ)
+		return setResultType(convertedExp, convertedExp.dTyp)
 	case *Variable_Expression:
-		typ := symbolTable[convertedExp.name].dataTyp.typ
-		if typ == FUNCTION_TYPE {
+		dTyp := symbolTable[convertedExp.name].dataTyp
+		if dTyp.typ == FUNCTION_TYPE {
 			fail("Function name", convertedExp.name, "used as variable")
 		}
-		return setResultType(convertedExp, typ)
+		return setResultType(convertedExp, dTyp)
 	case *Cast_Expression:
 		newInner := typeCheckExpression(convertedExp.innerExp)
 		newCast := Cast_Expression{targetType: convertedExp.targetType, innerExp: newInner}
 		return setResultType(&newCast, convertedExp.targetType)
 	case *Unary_Expression:
 		newInner := typeCheckExpression(convertedExp.innerExp)
-		if (convertedExp.unOp == COMPLEMENT_OPERATOR) && (getResultType(newInner) == DOUBLE_TYPE) {
+		if (convertedExp.unOp == COMPLEMENT_OPERATOR) && (getResultType(newInner).typ == DOUBLE_TYPE) {
 			fail("Can't take the bitwise complement of a double")
 		}
 		newUnary := Unary_Expression{unOp: convertedExp.unOp, innerExp: newInner}
 		if convertedExp.unOp == NOT_OPERATOR {
-			return setResultType(&newUnary, INT_TYPE)
+			return setResultType(&newUnary, Data_Type{typ: INT_TYPE})
 		} else {
 			return setResultType(&newUnary, getResultType(newInner))
 		}
@@ -492,13 +493,13 @@ func typeCheckExpression(exp Expression) Expression {
 		newFirstExp := typeCheckExpression(convertedExp.firstExp)
 		newSecExp := typeCheckExpression(convertedExp.secExp)
 		if convertedExp.binOp == REMAINDER_OPERATOR {
-			if (getResultType(newFirstExp) == DOUBLE_TYPE) || (getResultType(newSecExp) == DOUBLE_TYPE) {
+			if (getResultType(newFirstExp).typ == DOUBLE_TYPE) || (getResultType(newSecExp).typ == DOUBLE_TYPE) {
 				fail("Can't take the remainder using doubles")
 			}
 		}
 		if (convertedExp.binOp == AND_OPERATOR) || (convertedExp.binOp == OR_OPERATOR) {
 			newBinExp := Binary_Expression{binOp: convertedExp.binOp, firstExp: newFirstExp, secExp: newSecExp}
-			return setResultType(&newBinExp, INT_TYPE)
+			return setResultType(&newBinExp, Data_Type{typ: INT_TYPE})
 		}
 		typ1 := getResultType(newFirstExp)
 		typ2 := getResultType(newSecExp)
@@ -511,7 +512,7 @@ func typeCheckExpression(exp Expression) Expression {
 			return setResultType(&newBinExp, commonTyp)
 		} else {
 			// comparisons (less than, equal, etc. have a type of int)
-			return setResultType(&newBinExp, INT_TYPE)
+			return setResultType(&newBinExp, Data_Type{typ: INT_TYPE})
 		}
 	case *Assignment_Expression:
 		newLvalue := typeCheckExpression(convertedExp.lvalue)
@@ -550,12 +551,12 @@ func typeCheckExpression(exp Expression) Expression {
 		newArgs := []Expression{}
 		for index, _ := range convertedExp.args {
 			newArg := typeCheckExpression(convertedExp.args[index])
-			newArg = convertToType(newArg, existingTyp.paramTypes[index].typ)
+			newArg = convertToType(newArg, *existingTyp.paramTypes[index])
 			newArgs = append(newArgs, newArg)
 		}
 
 		callExp := Function_Call_Expression{functionName: convertedExp.functionName, args: newArgs}
-		return setResultType(&callExp, existingTyp.returnType.typ)
+		return setResultType(&callExp, *existingTyp.returnType)
 	}
 
 	fail("Unknown Expression type in typeCheckExpression")

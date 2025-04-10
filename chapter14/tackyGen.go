@@ -538,7 +538,7 @@ func (st *Null_Statement) statementToTacky() []Instruction_Tacky {
 //###############################################################################
 
 func (exp *Constant_Value_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	val := Constant_Value_Tacky{typ: exp.typ, value: exp.value}
+	val := Constant_Value_Tacky{typ: exp.dTyp.typ, value: exp.value}
 	return &val, instructions
 }
 
@@ -555,39 +555,39 @@ func (exp *Cast_Expression) expToTacky(instructions []Instruction_Tacky) (Value_
 	innerType := getResultType(exp.innerExp)
 
 	// if they are both the same type then nothing more to do
-	if exp.targetType == innerType {
+	if exp.targetType.isEqualType(&innerType) {
 		return innerResult, instructions
 	}
 
-	dst := makeTackyVariable(exp.targetType)
+	dst := makeTackyVariable(exp.targetType.typ)
 	// TODO: update as we add more data types
-	if exp.targetType == DOUBLE_TYPE {
-		if (innerType == INT_TYPE) || (innerType == LONG_TYPE) {
+	if exp.targetType.typ == DOUBLE_TYPE {
+		if (innerType.typ == INT_TYPE) || (innerType.typ == LONG_TYPE) {
 			newInstr := Int_To_Double_Instruction_Tacky{src: innerResult, dst: &dst}
 			instructions = append(instructions, &newInstr)
-		} else if (innerType == UNSIGNED_INT_TYPE) || (innerType == UNSIGNED_LONG_TYPE) {
+		} else if (innerType.typ == UNSIGNED_INT_TYPE) || (innerType.typ == UNSIGNED_LONG_TYPE) {
 			newInstr := UInt_To_Double_Instruction_Tacky{src: innerResult, dst: &dst}
 			instructions = append(instructions, &newInstr)
 		} else {
 			fail("Cast not supported")
 		}
-	} else if innerType == DOUBLE_TYPE {
-		if (exp.targetType == INT_TYPE) || (exp.targetType == LONG_TYPE) {
+	} else if innerType.typ == DOUBLE_TYPE {
+		if (exp.targetType.typ == INT_TYPE) || (exp.targetType.typ == LONG_TYPE) {
 			newInstr := Double_To_Int_Instruction_Tacky{src: innerResult, dst: &dst}
 			instructions = append(instructions, &newInstr)
-		} else if (exp.targetType == UNSIGNED_INT_TYPE) || (exp.targetType == UNSIGNED_LONG_TYPE) {
+		} else if (exp.targetType.typ == UNSIGNED_INT_TYPE) || (exp.targetType.typ == UNSIGNED_LONG_TYPE) {
 			newInstr := Double_To_UInt_Instruction_Tacky{src: innerResult, dst: &dst}
 			instructions = append(instructions, &newInstr)
 		} else {
 			fail("Cast not supported")
 		}
-	} else if size(exp.targetType) == size(innerType) {
+	} else if size(exp.targetType.typ) == size(innerType.typ) {
 		newInstr := Copy_Instruction_Tacky{src: innerResult, dst: &dst}
 		instructions = append(instructions, &newInstr)
-	} else if size(exp.targetType) < size(innerType) {
+	} else if size(exp.targetType.typ) < size(innerType.typ) {
 		newInstr := Truncate_Instruction_Tacky{src: innerResult, dst: &dst}
 		instructions = append(instructions, &newInstr)
-	} else if isSigned(innerType) {
+	} else if isSigned(innerType.typ) {
 		// the target type is bigger, do a sign extend since the inner type is signed
 		newInstr := Sign_Extend_Instruction_Tacky{src: innerResult, dst: &dst}
 		instructions = append(instructions, &newInstr)
@@ -604,7 +604,7 @@ func (exp *Cast_Expression) expToTacky(instructions []Instruction_Tacky) (Value_
 
 func (exp *Unary_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
 	src, instructions := exp.innerExp.expToTacky(instructions)
-	dst := makeTackyVariable(getResultType(exp))
+	dst := makeTackyVariable(getResultType(exp).typ)
 	instr := Unary_Instruction_Tacky{unOp: exp.unOp, src: src, dst: &dst}
 	instructions = append(instructions, &instr)
 	return &dst, instructions
@@ -622,7 +622,7 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		v2, instructions := exp.secExp.expToTacky(instructions)
 		j2 := Jump_If_Zero_Instruction_Tacky{condition: v2, target: false_label}
 		instructions = append(instructions, &j2)
-		result := makeTackyVariable(getResultType(exp))
+		result := makeTackyVariable(getResultType(exp).typ)
 		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{typ: INT_TYPE, value: "1"}, dst: &result}
 		instructions = append(instructions, &cp1)
 		end := makeLabelName("end")
@@ -643,7 +643,7 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		v2, instructions := exp.secExp.expToTacky(instructions)
 		j2 := Jump_If_Not_Zero_Instruction_Tacky{condition: v2, target: true_label}
 		instructions = append(instructions, &j2)
-		result := makeTackyVariable(getResultType(exp))
+		result := makeTackyVariable(getResultType(exp).typ)
 		cp1 := Copy_Instruction_Tacky{src: &Constant_Value_Tacky{typ: INT_TYPE, value: "0"}, dst: &result}
 		instructions = append(instructions, &cp1)
 		end := makeLabelName("end")
@@ -659,7 +659,7 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 	} else {
 		src1, instructions := exp.firstExp.expToTacky(instructions)
 		src2, instructions := exp.secExp.expToTacky(instructions)
-		dst := makeTackyVariable(getResultType(exp))
+		dst := makeTackyVariable(getResultType(exp).typ)
 		instr := Binary_Instruction_Tacky{binOp: exp.binOp, src1: src1, src2: src2, dst: &dst}
 		instructions = append(instructions, &instr)
 		return &dst, instructions
@@ -690,7 +690,7 @@ func (exp *Conditional_Expression) expToTacky(instructions []Instruction_Tacky) 
 	jmp := Jump_If_Zero_Instruction_Tacky{c, rightLabel}
 	instructions = append(instructions, &jmp)
 	v1, instructions := exp.middleExp.expToTacky(instructions)
-	result := makeTackyVariable(getResultType(exp))
+	result := makeTackyVariable(getResultType(exp).typ)
 	cp1 := Copy_Instruction_Tacky{v1, &result}
 	instructions = append(instructions, &cp1)
 	endLabel := makeLabelName("end")
@@ -717,9 +717,23 @@ func (e *Function_Call_Expression) expToTacky(instructions []Instruction_Tacky) 
 		argsTacky = append(argsTacky, argTac)
 	}
 
-	retVal := makeTackyVariable(getResultType(e))
+	retVal := makeTackyVariable(getResultType(e).typ)
 	fn := Function_Call_Tacky{funcName: e.functionName, args: argsTacky, returnVal: &retVal}
 	instructions = append(instructions, &fn)
 
 	return &retVal, instructions
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (e *Dereference_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+	// TODO:
+	return nil, instructions
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (e *Address_Of_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+	// TODO:
+	return nil, instructions
 }
