@@ -225,7 +225,7 @@ type Null_Statement struct {
 //###############################################################################
 
 type Expression interface {
-	expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky)
+	expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky)
 	getPrettyPrintLines() []string
 }
 

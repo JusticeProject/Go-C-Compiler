@@ -147,6 +147,28 @@ type Copy_Instruction_Tacky struct {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+// get address of variable src and store it in dst
+type Get_Address_Instruction_Tacky struct {
+	src Value_Tacky
+	dst Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Load_Instruction_Tacky struct {
+	srcPtr Value_Tacky
+	dst    Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Store_Instruction_Tacky struct {
+	src    Value_Tacky
+	dstPtr Value_Tacky
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 type Jump_Instruction_Tacky struct {
 	target string
 }
@@ -178,6 +200,30 @@ type Function_Call_Tacky struct {
 	args      []Value_Tacky
 	returnVal Value_Tacky
 }
+
+//###############################################################################
+//###############################################################################
+//###############################################################################
+
+type Expression_Result_Tacky interface {
+	isExpResult()
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Plain_Operand_Tacky struct {
+	val Value_Tacky
+}
+
+func (er *Plain_Operand_Tacky) isExpResult() {}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+type Dereferenced_Pointer_Tacky struct {
+	ptr Value_Tacky
+}
+
+func (er *Dereferenced_Pointer_Tacky) isExpResult() {}
 
 //###############################################################################
 //###############################################################################
@@ -291,7 +337,7 @@ func (d *Variable_Declaration) declToTacky() []Instruction_Tacky {
 	} else {
 		// get the instructions for the initializer
 		instructions := []Instruction_Tacky{}
-		result, instructions := d.initializer.expToTacky(instructions)
+		result, instructions := expToTackyAndConvert(d.initializer, instructions)
 
 		// assign the value from the initializer to the declared variable
 		v := Variable_Value_Tacky{d.name}
@@ -362,7 +408,7 @@ func (fie *For_Initial_Expression) forInitialToTacky() []Instruction_Tacky {
 	if fie.exp == nil {
 		return []Instruction_Tacky{}
 	} else {
-		_, instructions := fie.exp.expToTacky([]Instruction_Tacky{})
+		_, instructions := expToTackyAndConvert(fie.exp, []Instruction_Tacky{})
 		return instructions
 	}
 }
@@ -373,7 +419,7 @@ func (fie *For_Initial_Expression) forInitialToTacky() []Instruction_Tacky {
 
 func (st *Return_Statement) statementToTacky() []Instruction_Tacky {
 	instructions := []Instruction_Tacky{}
-	val, instructions := st.exp.expToTacky(instructions)
+	val, instructions := expToTackyAndConvert(st.exp, instructions)
 	instr := Return_Instruction_Tacky{val: val}
 	instructions = append(instructions, &instr)
 	return instructions
@@ -383,7 +429,7 @@ func (st *Return_Statement) statementToTacky() []Instruction_Tacky {
 
 func (st *Expression_Statement) statementToTacky() []Instruction_Tacky {
 	instructions := []Instruction_Tacky{}
-	_, instructions = st.exp.expToTacky(instructions)
+	_, instructions = expToTackyAndConvert(st.exp, instructions)
 	return instructions
 }
 
@@ -391,7 +437,7 @@ func (st *Expression_Statement) statementToTacky() []Instruction_Tacky {
 
 func (st *If_Statement) statementToTacky() []Instruction_Tacky {
 	if st.elseSt == nil {
-		c, instructions := st.condition.expToTacky([]Instruction_Tacky{})
+		c, instructions := expToTackyAndConvert(st.condition, []Instruction_Tacky{})
 		endLabel := makeLabelName("end")
 		jmp := Jump_If_Zero_Instruction_Tacky{condition: c, target: endLabel}
 		instructions = append(instructions, &jmp)
@@ -401,7 +447,7 @@ func (st *If_Statement) statementToTacky() []Instruction_Tacky {
 		instructions = append(instructions, &lblInstr)
 		return instructions
 	} else {
-		c, instructions := st.condition.expToTacky([]Instruction_Tacky{})
+		c, instructions := expToTackyAndConvert(st.condition, []Instruction_Tacky{})
 		elseLabel := makeLabelName("else")
 		jmpElse := Jump_If_Zero_Instruction_Tacky{condition: c, target: elseLabel}
 		instructions = append(instructions, &jmpElse)
@@ -448,7 +494,7 @@ func (st *While_Statement) statementToTacky() []Instruction_Tacky {
 	continueLabel := Label_Instruction_Tacky{"continue_" + st.label}
 	instructions = append(instructions, &continueLabel)
 
-	v, instructions := st.condition.expToTacky(instructions)
+	v, instructions := expToTackyAndConvert(st.condition, instructions)
 
 	jmpBreak := Jump_If_Zero_Instruction_Tacky{condition: v, target: "break_" + st.label}
 	instructions = append(instructions, &jmpBreak)
@@ -479,7 +525,7 @@ func (st *Do_While_Statement) statementToTacky() []Instruction_Tacky {
 	continueLabel := Label_Instruction_Tacky{"continue_" + st.label}
 	instructions = append(instructions, &continueLabel)
 
-	v, instructions := st.condition.expToTacky(instructions)
+	v, instructions := expToTackyAndConvert(st.condition, instructions)
 
 	jmp := Jump_If_Not_Zero_Instruction_Tacky{condition: v, target: "start_" + st.label}
 	instructions = append(instructions, &jmp)
@@ -503,7 +549,7 @@ func (st *For_Statement) statementToTacky() []Instruction_Tacky {
 
 	if st.condition != nil {
 		var v Value_Tacky
-		v, instructions = st.condition.expToTacky(instructions)
+		v, instructions = expToTackyAndConvert(st.condition, instructions)
 		jmpBreak := Jump_If_Zero_Instruction_Tacky{condition: v, target: "break_" + st.label}
 		instructions = append(instructions, &jmpBreak)
 	}
@@ -515,7 +561,7 @@ func (st *For_Statement) statementToTacky() []Instruction_Tacky {
 	instructions = append(instructions, &continueLabel)
 
 	if st.post != nil {
-		_, instructions = st.post.expToTacky(instructions)
+		_, instructions = expToTackyAndConvert(st.post, instructions)
 	}
 
 	jmp := Jump_Instruction_Tacky{target: "start_" + st.label}
@@ -537,30 +583,49 @@ func (st *Null_Statement) statementToTacky() []Instruction_Tacky {
 //###############################################################################
 //###############################################################################
 
-func (exp *Constant_Value_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+func expToTackyAndConvert(exp Expression, instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+	result, instructions := exp.expToTacky(instructions)
+
+	switch convertedRes := result.(type) {
+	case *Plain_Operand_Tacky:
+		return convertedRes.val, instructions
+	case *Dereferenced_Pointer_Tacky:
+		dst := makeTackyVariable(getResultType(exp).typ)
+		load := Load_Instruction_Tacky{srcPtr: convertedRes.ptr, dst: &dst}
+		instructions = append(instructions, &load)
+		return &dst, instructions
+	}
+	return nil, []Instruction_Tacky{}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func (exp *Constant_Value_Expression) expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky) {
 	val := Constant_Value_Tacky{typ: exp.dTyp.typ, value: exp.value}
-	return &val, instructions
+	return &Plain_Operand_Tacky{&val}, instructions
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (exp *Variable_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	return &Variable_Value_Tacky{exp.name}, instructions
+func (exp *Variable_Expression) expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky) {
+	v := Variable_Value_Tacky{exp.name}
+	return &Plain_Operand_Tacky{&v}, instructions
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (exp *Cast_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	innerResult, instructions := exp.innerExp.expToTacky(instructions)
+func (exp *Cast_Expression) expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky) {
+	innerResult, instructions := expToTackyAndConvert(exp.innerExp, instructions)
 	innerType := getResultType(exp.innerExp)
 
 	// if they are both the same type then nothing more to do
 	if exp.targetType.isEqualType(&innerType) {
-		return innerResult, instructions
+		return &Plain_Operand_Tacky{innerResult}, instructions
 	}
 
 	dst := makeTackyVariable(exp.targetType.typ)
 	// TODO: update as we add more data types
+	// TODO: need to handle casting to and from pointers, see page 375
 	if exp.targetType.typ == DOUBLE_TYPE {
 		if (innerType.typ == INT_TYPE) || (innerType.typ == LONG_TYPE) {
 			newInstr := Int_To_Double_Instruction_Tacky{src: innerResult, dst: &dst}
@@ -597,29 +662,29 @@ func (exp *Cast_Expression) expToTacky(instructions []Instruction_Tacky) (Value_
 		instructions = append(instructions, &newInstr)
 	}
 
-	return &dst, instructions
+	return &Plain_Operand_Tacky{&dst}, instructions
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (exp *Unary_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	src, instructions := exp.innerExp.expToTacky(instructions)
+func (exp *Unary_Expression) expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky) {
+	src, instructions := expToTackyAndConvert(exp.innerExp, instructions)
 	dst := makeTackyVariable(getResultType(exp).typ)
 	instr := Unary_Instruction_Tacky{unOp: exp.unOp, src: src, dst: &dst}
 	instructions = append(instructions, &instr)
-	return &dst, instructions
+	return &Plain_Operand_Tacky{&dst}, instructions
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky) {
 	// some operators can short-circuit on the first expression, so we handle them differently
 	if exp.binOp == AND_OPERATOR {
-		v1, instructions := exp.firstExp.expToTacky(instructions)
+		v1, instructions := expToTackyAndConvert(exp.firstExp, instructions)
 		false_label := makeLabelName("and_false")
 		j1 := Jump_If_Zero_Instruction_Tacky{condition: v1, target: false_label}
 		instructions = append(instructions, &j1)
-		v2, instructions := exp.secExp.expToTacky(instructions)
+		v2, instructions := expToTackyAndConvert(exp.secExp, instructions)
 		j2 := Jump_If_Zero_Instruction_Tacky{condition: v2, target: false_label}
 		instructions = append(instructions, &j2)
 		result := makeTackyVariable(getResultType(exp).typ)
@@ -634,13 +699,13 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		instructions = append(instructions, &cp2)
 		lb2 := Label_Instruction_Tacky{end}
 		instructions = append(instructions, &lb2)
-		return &result, instructions
+		return &Plain_Operand_Tacky{&result}, instructions
 	} else if exp.binOp == OR_OPERATOR {
-		v1, instructions := exp.firstExp.expToTacky(instructions)
+		v1, instructions := expToTackyAndConvert(exp.firstExp, instructions)
 		true_label := makeLabelName("or_true")
 		j1 := Jump_If_Not_Zero_Instruction_Tacky{condition: v1, target: true_label}
 		instructions = append(instructions, &j1)
-		v2, instructions := exp.secExp.expToTacky(instructions)
+		v2, instructions := expToTackyAndConvert(exp.secExp, instructions)
 		j2 := Jump_If_Not_Zero_Instruction_Tacky{condition: v2, target: true_label}
 		instructions = append(instructions, &j2)
 		result := makeTackyVariable(getResultType(exp).typ)
@@ -655,41 +720,45 @@ func (exp *Binary_Expression) expToTacky(instructions []Instruction_Tacky) (Valu
 		instructions = append(instructions, &cp2)
 		lb2 := Label_Instruction_Tacky{end}
 		instructions = append(instructions, &lb2)
-		return &result, instructions
+		return &Plain_Operand_Tacky{&result}, instructions
 	} else {
-		src1, instructions := exp.firstExp.expToTacky(instructions)
-		src2, instructions := exp.secExp.expToTacky(instructions)
+		src1, instructions := expToTackyAndConvert(exp.firstExp, instructions)
+		src2, instructions := expToTackyAndConvert(exp.secExp, instructions)
 		dst := makeTackyVariable(getResultType(exp).typ)
 		instr := Binary_Instruction_Tacky{binOp: exp.binOp, src1: src1, src2: src2, dst: &dst}
 		instructions = append(instructions, &instr)
-		return &dst, instructions
+		return &Plain_Operand_Tacky{&dst}, instructions
 	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (exp *Assignment_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	// evaluate the right side of the expression
-	result, instructions := exp.rightExp.expToTacky(instructions)
+func (exp *Assignment_Expression) expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky) {
+	lval, instructions := exp.lvalue.expToTacky(instructions)
+	rval, instructions := expToTackyAndConvert(exp.rightExp, instructions)
 
-	varExp, _ := exp.lvalue.(*Variable_Expression)
-	v := Variable_Value_Tacky{varExp.name}
+	switch convertedLval := lval.(type) {
+	case *Plain_Operand_Tacky:
+		cp := Copy_Instruction_Tacky{src: rval, dst: convertedLval.val}
+		instructions = append(instructions, &cp)
+		return lval, instructions
+	case *Dereferenced_Pointer_Tacky:
+		store := Store_Instruction_Tacky{src: rval, dstPtr: convertedLval.ptr}
+		instructions = append(instructions, &store)
+		return &Plain_Operand_Tacky{rval}, instructions
+	}
 
-	// store the right side of the expression in the lvalue
-	cp := Copy_Instruction_Tacky{result, &v}
-	instructions = append(instructions, &cp)
-
-	return &v, instructions
+	return nil, []Instruction_Tacky{}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (exp *Conditional_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	c, instructions := exp.condition.expToTacky(instructions)
+func (exp *Conditional_Expression) expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky) {
+	c, instructions := expToTackyAndConvert(exp.condition, instructions)
 	rightLabel := makeLabelName("rightExp")
 	jmp := Jump_If_Zero_Instruction_Tacky{c, rightLabel}
 	instructions = append(instructions, &jmp)
-	v1, instructions := exp.middleExp.expToTacky(instructions)
+	v1, instructions := expToTackyAndConvert(exp.middleExp, instructions)
 	result := makeTackyVariable(getResultType(exp).typ)
 	cp1 := Copy_Instruction_Tacky{v1, &result}
 	instructions = append(instructions, &cp1)
@@ -698,22 +767,22 @@ func (exp *Conditional_Expression) expToTacky(instructions []Instruction_Tacky) 
 	instructions = append(instructions, &jmpEnd)
 	rightLabelInstr := Label_Instruction_Tacky{rightLabel}
 	instructions = append(instructions, &rightLabelInstr)
-	v2, instructions := exp.rightExp.expToTacky(instructions)
+	v2, instructions := expToTackyAndConvert(exp.rightExp, instructions)
 	cp2 := Copy_Instruction_Tacky{v2, &result}
 	instructions = append(instructions, &cp2)
 	endLabelInstr := Label_Instruction_Tacky{endLabel}
 	instructions = append(instructions, &endLabelInstr)
-	return &result, instructions
+	return &Plain_Operand_Tacky{&result}, instructions
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (e *Function_Call_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
+func (e *Function_Call_Expression) expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky) {
 	argsTacky := []Value_Tacky{}
 
 	for _, argExp := range e.args {
 		var argTac Value_Tacky
-		argTac, instructions = argExp.expToTacky(instructions)
+		argTac, instructions = expToTackyAndConvert(argExp, instructions)
 		argsTacky = append(argsTacky, argTac)
 	}
 
@@ -721,19 +790,30 @@ func (e *Function_Call_Expression) expToTacky(instructions []Instruction_Tacky) 
 	fn := Function_Call_Tacky{funcName: e.functionName, args: argsTacky, returnVal: &retVal}
 	instructions = append(instructions, &fn)
 
-	return &retVal, instructions
+	return &Plain_Operand_Tacky{&retVal}, instructions
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (e *Dereference_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	// TODO:
-	return nil, instructions
+func (e *Dereference_Expression) expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky) {
+	result, instructions := expToTackyAndConvert(e.innerExp, instructions)
+	return &Dereferenced_Pointer_Tacky{result}, instructions
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (e *Address_Of_Expression) expToTacky(instructions []Instruction_Tacky) (Value_Tacky, []Instruction_Tacky) {
-	// TODO:
-	return nil, instructions
+func (e *Address_Of_Expression) expToTacky(instructions []Instruction_Tacky) (Expression_Result_Tacky, []Instruction_Tacky) {
+	v, instructions := e.innerExp.expToTacky(instructions)
+
+	switch convertedV := v.(type) {
+	case *Plain_Operand_Tacky:
+		dst := makeTackyVariable(getResultType(e).typ)
+		getAddr := Get_Address_Instruction_Tacky{src: convertedV.val, dst: &dst}
+		instructions = append(instructions, &getAddr)
+		return &Plain_Operand_Tacky{&dst}, instructions
+	case *Dereferenced_Pointer_Tacky:
+		return &Plain_Operand_Tacky{convertedV.ptr}, instructions
+	}
+
+	return nil, []Instruction_Tacky{}
 }

@@ -192,7 +192,6 @@ func isSigned(typ DataTypeEnum) bool {
 	case UNSIGNED_LONG_TYPE:
 		return false
 	case DOUBLE_TYPE:
-		// TODO:
 		return false
 	}
 	fail("Can't determine signedness")
