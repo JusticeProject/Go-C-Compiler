@@ -445,15 +445,27 @@ func (e *Function_Call_Expression) getPrettyPrintLines() []string {
 /////////////////////////////////////////////////////////////////////////////////
 
 func (e *Dereference_Expression) getPrettyPrintLines() []string {
-	// TODO:
-	return []string{}
+	lines := []string{"DEREFERENCE(", doRightIndent()}
+	moreLines := e.innerExp.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+
+	return lines
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 
 func (e *Address_Of_Expression) getPrettyPrintLines() []string {
-	// TODO:
-	return []string{}
+	lines := []string{"ADDRESS_OF(", doRightIndent()}
+	moreLines := e.innerExp.getPrettyPrintLines()
+	lines = append(lines, moreLines...)
+
+	lines = append(lines, doLeftIndent())
+	lines = append(lines, ")")
+
+	return lines
 }
 
 //###############################################################################

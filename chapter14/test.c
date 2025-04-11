@@ -1,12 +1,8 @@
-static unsigned int test = 2.8;
-
-unsigned int scale(unsigned int input, double scaleFactor);
+int *ptr = 0;
 
 int main(void) {
-    unsigned int result = scale(6, 1.51);
-    return result + test;
-}
-
-unsigned int scale(unsigned int input, double scaleFactor) {
-    return input * scaleFactor;
+    int x = 0;
+    ptr = &x;
+    *ptr = 4;
+    return *ptr;
 }

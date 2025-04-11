@@ -280,11 +280,13 @@ type Function_Call_Expression struct {
 }
 
 type Dereference_Expression struct {
-	innerExp Expression
+	innerExp  Expression
+	resultTyp Data_Type
 }
 
 type Address_Of_Expression struct {
-	innerExp Expression
+	innerExp  Expression
+	resultTyp Data_Type
 }
 
 //###############################################################################
@@ -523,8 +525,9 @@ func parseDeclarator(tokens []Token) (Declarator, []Token) {
 	if peekToken(tokens).tokenType == ASTERISK_TOKEN {
 		// it's a pointer
 		_, tokens = expect(ASTERISK_TOKEN, tokens)
-		dec, tokens := parseDeclarator(tokens)
-		return dec, tokens
+		innerDec, tokens := parseDeclarator(tokens)
+		pDec := Pointer_Declarator{innerDec: innerDec}
+		return &pDec, tokens
 	} else {
 		// it's a direct declarator
 		dec, tokens := parseDirectDeclarator(tokens)
@@ -1083,9 +1086,14 @@ func parseFactor(tokens []Token) (Expression, []Token) {
 	} else if isUnaryOperator(nextToken) {
 		unopType, tokens := parseUnaryOperator(tokens)
 		innerExp, tokens := parseFactor(tokens)
-		// TODO: if asterisk or ampersand, return deref or address_of, else return Unary_Expression
-		unExp := Unary_Expression{innerExp: innerExp, unOp: unopType}
-		return &unExp, tokens
+		if unopType == DEREFERENCE_OPERATOR {
+			return &Dereference_Expression{innerExp: innerExp}, tokens
+		} else if unopType == ADDRESS_OF_OPERATOR {
+			return &Address_Of_Expression{innerExp: innerExp}, tokens
+		} else {
+			unExp := Unary_Expression{innerExp: innerExp, unOp: unopType}
+			return &unExp, tokens
+		}
 	} else if nextToken.tokenType == OPEN_PARENTHESIS_TOKEN {
 		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
 		if isDataTypeKeyword(peekToken(tokens).tokenType) {

@@ -26,6 +26,8 @@ func dataTypeEnumToInitEnum(input DataTypeEnum) InitializerEnum {
 		return INITIAL_UNSIGNED_LONG
 	case DOUBLE_TYPE:
 		return INITIAL_DOUBLE
+	case POINTER_TYPE:
+		return INITIAL_UNSIGNED_LONG
 	}
 
 	fail("Can't convert DataTypeEnum to InitializerEnum")
@@ -86,6 +88,12 @@ func setResultType(exp Expression, dTyp Data_Type) Expression {
 	case *Function_Call_Expression:
 		convertedExp.resultTyp = dTyp
 		return convertedExp
+	case *Dereference_Expression:
+		convertedExp.resultTyp = dTyp
+		return convertedExp
+	case *Address_Of_Expression:
+		convertedExp.resultTyp = dTyp
+		return convertedExp
 	default:
 		fail("Unknown Expression in setResultType")
 	}
@@ -112,6 +120,10 @@ func getResultType(exp Expression) Data_Type {
 		return convertedExp.resultTyp
 	case *Function_Call_Expression:
 		return convertedExp.resultTyp
+	case *Dereference_Expression:
+		return convertedExp.resultTyp
+	case *Address_Of_Expression:
+		return convertedExp.resultTyp
 	default:
 		fail("Unknown Expression in getResultType")
 	}
@@ -127,6 +139,38 @@ func convertToType(exp Expression, newTyp Data_Type) Expression {
 	}
 	castExp := Cast_Expression{targetType: newTyp, innerExp: exp}
 	return setResultType(&castExp, newTyp)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func convertByAssignment(exp Expression, newTyp Data_Type) Expression {
+	currentTyp := getResultType(exp)
+
+	if currentTyp.isEqualType(&newTyp) {
+		return exp
+	}
+
+	if isArithmeticType(currentTyp) && isArithmeticType(newTyp) {
+		return convertToType(exp, newTyp)
+	}
+
+	if isNullPointerConstant(exp) && (newTyp.typ == POINTER_TYPE) {
+		return convertToType(exp, newTyp)
+	}
+
+	fail("Cannot convert type for assignment")
+	return nil
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func isArithmeticType(dTyp Data_Type) bool {
+	if (dTyp.typ == INT_TYPE) || (dTyp.typ == LONG_TYPE) || (dTyp.typ == UNSIGNED_INT_TYPE) ||
+		(dTyp.typ == UNSIGNED_LONG_TYPE) || (dTyp.typ == DOUBLE_TYPE) {
+		// TODO: update if statement if more types are added
+		return true
+	}
+	return false
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -179,6 +223,28 @@ func getCommonType(typ1 Data_Type, typ2 Data_Type) Data_Type {
 	} else {
 		return typ2
 	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func getCommonPointerType(exp1 Expression, exp2 Expression) Data_Type {
+	exp1Typ := getResultType(exp1)
+	exp2Typ := getResultType(exp2)
+
+	if exp1Typ.isEqualType(&exp2Typ) {
+		return exp1Typ
+	}
+
+	if isNullPointerConstant(exp1) {
+		return exp2Typ
+	}
+
+	if isNullPointerConstant(exp2) {
+		return exp1Typ
+	}
+
+	fail("Expressions have incompatible types")
+	return Data_Type{}
 }
 
 //###############################################################################
@@ -255,7 +321,7 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) Variable_Declaration {
 	constValExp, isConst := decl.initializer.(*Constant_Value_Expression)
 	if isConst {
 		initEnum = dataTypeEnumToInitEnum(decl.dTyp.typ)
-		decl.initializer = convertToType(decl.initializer, decl.dTyp)
+		decl.initializer = convertByAssignment(decl.initializer, decl.dTyp)
 		// TODO: if the constant value is a long that doesn't fit into an int (2147483650L) then
 		// strconv.ParseInt(value, 10, 64), then cast int64 to int32 (for example), then back to string
 		// I tested this and the assembler will truncate it for me.
@@ -328,7 +394,7 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) Variable_Declaration {
 		constValExp, isConstVal := decl.initializer.(*Constant_Value_Expression)
 		if isConstVal {
 			initEnum = dataTypeEnumToInitEnum(decl.dTyp.typ)
-			decl.initializer = convertToType(decl.initializer, decl.dTyp)
+			decl.initializer = convertByAssignment(decl.initializer, decl.dTyp)
 			// TODO:
 			// if the constant value is a long that doesn't fit into an int (2147483650L) then
 			// strconv.ParseInt(value, 10, 64), then cast int64 to int32 (for example), then back to string
@@ -346,7 +412,7 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) Variable_Declaration {
 		symbolTable[decl.name] = Symbol{dataTyp: decl.dTyp, attrs: LOCAL_ATTRIBUTES}
 		if decl.initializer != nil {
 			decl.initializer = typeCheckExpression(decl.initializer)
-			decl.initializer = convertToType(decl.initializer, decl.dTyp)
+			decl.initializer = convertByAssignment(decl.initializer, decl.dTyp)
 		}
 	}
 
@@ -396,7 +462,7 @@ func typeCheckStatement(st Statement, funcName string) Statement {
 	case *Return_Statement:
 		convertedSt.exp = typeCheckExpression(convertedSt.exp)
 		retType := symbolTable[funcName].dataTyp.returnType
-		convertedSt.exp = convertToType(convertedSt.exp, *retType)
+		convertedSt.exp = convertByAssignment(convertedSt.exp, *retType)
 		return convertedSt
 	case *Expression_Statement:
 		convertedSt.exp = typeCheckExpression(convertedSt.exp)
@@ -476,11 +542,23 @@ func typeCheckExpression(exp Expression) Expression {
 		return setResultType(convertedExp, dTyp)
 	case *Cast_Expression:
 		newInner := typeCheckExpression(convertedExp.innerExp)
+
+		innerTyp := getResultType(newInner).typ
+		targetTyp := convertedExp.targetType.typ
+		if ((innerTyp == POINTER_TYPE) && (targetTyp == DOUBLE_TYPE)) || ((innerTyp == DOUBLE_TYPE) && (targetTyp == POINTER_TYPE)) {
+			fail("Can't convert between pointer and double types")
+		}
+
 		newCast := Cast_Expression{targetType: convertedExp.targetType, innerExp: newInner}
 		return setResultType(&newCast, convertedExp.targetType)
 	case *Unary_Expression:
 		newInner := typeCheckExpression(convertedExp.innerExp)
-		if (convertedExp.unOp == COMPLEMENT_OPERATOR) && (getResultType(newInner).typ == DOUBLE_TYPE) {
+		if getResultType(newInner).typ == POINTER_TYPE {
+			if (convertedExp.unOp == NEGATE_OPERATOR) || (convertedExp.unOp == COMPLEMENT_OPERATOR) {
+				fail("Can't negate or take the bitwise complement of a pointer")
+			}
+		}
+		if (getResultType(newInner).typ == DOUBLE_TYPE) && (convertedExp.unOp == COMPLEMENT_OPERATOR) {
 			fail("Can't take the bitwise complement of a double")
 		}
 		newUnary := Unary_Expression{unOp: convertedExp.unOp, innerExp: newInner}
@@ -492,8 +570,17 @@ func typeCheckExpression(exp Expression) Expression {
 	case *Binary_Expression:
 		newFirstExp := typeCheckExpression(convertedExp.firstExp)
 		newSecExp := typeCheckExpression(convertedExp.secExp)
+		typ1 := getResultType(newFirstExp)
+		typ2 := getResultType(newSecExp)
+
+		if (convertedExp.binOp == MULTIPLY_OPERATOR) || (convertedExp.binOp == DIVIDE_OPERATOR) || (convertedExp.binOp == REMAINDER_OPERATOR) {
+			if (typ1.typ == POINTER_TYPE) || (typ2.typ == POINTER_TYPE) {
+				fail("Can't multiply, divide, or take the remainder of pointers")
+			}
+		}
+
 		if convertedExp.binOp == REMAINDER_OPERATOR {
-			if (getResultType(newFirstExp).typ == DOUBLE_TYPE) || (getResultType(newSecExp).typ == DOUBLE_TYPE) {
+			if (typ1.typ == DOUBLE_TYPE) || (typ2.typ == DOUBLE_TYPE) {
 				fail("Can't take the remainder using doubles")
 			}
 		}
@@ -501,9 +588,13 @@ func typeCheckExpression(exp Expression) Expression {
 			newBinExp := Binary_Expression{binOp: convertedExp.binOp, firstExp: newFirstExp, secExp: newSecExp}
 			return setResultType(&newBinExp, Data_Type{typ: INT_TYPE})
 		}
-		typ1 := getResultType(newFirstExp)
-		typ2 := getResultType(newSecExp)
-		commonTyp := getCommonType(typ1, typ2)
+
+		var commonTyp Data_Type
+		if (typ1.typ == POINTER_TYPE) || (typ2.typ == POINTER_TYPE) {
+			commonTyp = getCommonPointerType(newFirstExp, newSecExp)
+		} else {
+			commonTyp = getCommonType(typ1, typ2)
+		}
 		newFirstExp = convertToType(newFirstExp, commonTyp)
 		newSecExp = convertToType(newSecExp, commonTyp)
 		newBinExp := Binary_Expression{binOp: convertedExp.binOp, firstExp: newFirstExp, secExp: newSecExp}
@@ -515,10 +606,14 @@ func typeCheckExpression(exp Expression) Expression {
 			return setResultType(&newBinExp, Data_Type{typ: INT_TYPE})
 		}
 	case *Assignment_Expression:
+		valid := isValidLvalue(convertedExp.lvalue)
+		if !valid {
+			fail("Semantic error. Invalid lvalue on left side of assignment.")
+		}
 		newLvalue := typeCheckExpression(convertedExp.lvalue)
 		newRightExp := typeCheckExpression(convertedExp.rightExp)
 		leftTyp := getResultType(newLvalue)
-		newRightExp = convertToType(newRightExp, leftTyp)
+		newRightExp = convertByAssignment(newRightExp, leftTyp)
 		assignExp := Assignment_Expression{lvalue: newLvalue, rightExp: newRightExp}
 		return setResultType(&assignExp, leftTyp)
 	case *Conditional_Expression:
@@ -526,7 +621,14 @@ func typeCheckExpression(exp Expression) Expression {
 		newRight := typeCheckExpression(convertedExp.rightExp)
 		middleTyp := getResultType(newMiddle)
 		rightTyp := getResultType(newRight)
-		commonTyp := getCommonType(middleTyp, rightTyp)
+
+		var commonTyp Data_Type
+		if (middleTyp.typ == POINTER_TYPE) || (rightTyp.typ == POINTER_TYPE) {
+			commonTyp = getCommonPointerType(newMiddle, newRight)
+		} else {
+			commonTyp = getCommonType(middleTyp, rightTyp)
+		}
+
 		newMiddle = convertToType(newMiddle, commonTyp)
 		newRight = convertToType(newRight, commonTyp)
 		newCond := typeCheckExpression(convertedExp.condition)
@@ -551,14 +653,59 @@ func typeCheckExpression(exp Expression) Expression {
 		newArgs := []Expression{}
 		for index, _ := range convertedExp.args {
 			newArg := typeCheckExpression(convertedExp.args[index])
-			newArg = convertToType(newArg, *existingTyp.paramTypes[index])
+			newArg = convertByAssignment(newArg, *existingTyp.paramTypes[index])
 			newArgs = append(newArgs, newArg)
 		}
 
 		callExp := Function_Call_Expression{functionName: convertedExp.functionName, args: newArgs}
 		return setResultType(&callExp, *existingTyp.returnType)
+	case *Dereference_Expression:
+		newInner := typeCheckExpression(convertedExp.innerExp)
+		dType := getResultType(newInner)
+		if dType.typ != POINTER_TYPE {
+			fail("Dereference operator must use a pointer")
+		}
+		derefExp := Dereference_Expression{innerExp: newInner}
+		return setResultType(&derefExp, *dType.refType)
+	case *Address_Of_Expression:
+		valid := isValidLvalue(convertedExp.innerExp)
+		if !valid {
+			fail("Semantic error. Address_Of expression requires lvalue.")
+		}
+		newInner := typeCheckExpression(convertedExp.innerExp)
+		referencedTyp := getResultType(newInner)
+		addrExp := Address_Of_Expression{innerExp: newInner}
+		return setResultType(&addrExp, Data_Type{typ: POINTER_TYPE, refType: &referencedTyp})
 	}
 
 	fail("Unknown Expression type in typeCheckExpression")
 	return nil
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func isValidLvalue(exp Expression) bool {
+	switch exp.(type) {
+	case *Variable_Expression:
+		return true
+	case *Dereference_Expression:
+		return true
+	default:
+		return false
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+func isNullPointerConstant(exp Expression) bool {
+	switch convertedExp := exp.(type) {
+	case *Constant_Value_Expression:
+		typ := convertedExp.dTyp.typ
+		if (typ == INT_TYPE) || (typ == UNSIGNED_INT_TYPE) || (typ == LONG_TYPE) || (typ == UNSIGNED_LONG_TYPE) {
+			if convertedExp.value == "0" {
+				return true
+			}
+		}
+	}
+	return false
 }

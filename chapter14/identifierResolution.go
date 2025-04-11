@@ -267,10 +267,6 @@ func resolveExpression(exp Expression, identifierMap map[string]Identifier_Info)
 		newSecond := resolveExpression(convertedExp.secExp, identifierMap)
 		return &Binary_Expression{binOp: convertedExp.binOp, firstExp: newFirst, secExp: newSecond}
 	case *Assignment_Expression:
-		_, isValidLvalue := convertedExp.lvalue.(*Variable_Expression)
-		if !isValidLvalue {
-			fail("Semantic error. Invalid lvalue on left side of assignment.")
-		}
 		newLvalue := resolveExpression(convertedExp.lvalue, identifierMap)
 		newRightExp := resolveExpression(convertedExp.rightExp, identifierMap)
 		return &Assignment_Expression{lvalue: newLvalue, rightExp: newRightExp}
@@ -292,6 +288,12 @@ func resolveExpression(exp Expression, identifierMap map[string]Identifier_Info)
 		} else {
 			fail("Semantic error. Trying to use undeclared function:", convertedExp.functionName)
 		}
+	case *Dereference_Expression:
+		newInner := resolveExpression(convertedExp.innerExp, identifierMap)
+		return &Dereference_Expression{innerExp: newInner}
+	case *Address_Of_Expression:
+		newInner := resolveExpression(convertedExp.innerExp, identifierMap)
+		return &Address_Of_Expression{innerExp: newInner}
 	default:
 		fail("unknown Expression type when resolving variables")
 	}
