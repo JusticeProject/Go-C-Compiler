@@ -625,7 +625,6 @@ func (exp *Cast_Expression) expToTacky(instructions []Instruction_Tacky) (Expres
 
 	dst := makeTackyVariable(exp.targetType.typ)
 	// TODO: update as we add more data types
-	// TODO: need to handle casting to and from pointers, see page 375
 	if exp.targetType.typ == DOUBLE_TYPE {
 		if (innerType.typ == INT_TYPE) || (innerType.typ == LONG_TYPE) {
 			newInstr := Int_To_Double_Instruction_Tacky{src: innerResult, dst: &dst}

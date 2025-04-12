@@ -609,7 +609,7 @@ func parseAbstractDeclarator(tokens []Token) (Abstract_Declarator, []Token) {
 		_, tokens = expect(OPEN_PARENTHESIS_TOKEN, tokens)
 		innerDec, tokens := parseAbstractDeclarator(tokens)
 		_, tokens = expect(CLOSE_PARENTHESIS_TOKEN, tokens)
-		return &Abstract_Pointer_Declarator{innerDec}, tokens
+		return innerDec, tokens
 	} else {
 		return &Abstract_Base_Declarator{}, tokens
 	}
