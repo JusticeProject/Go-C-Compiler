@@ -302,9 +302,9 @@ func typeCheckFuncDecl(decl Function_Declaration) Function_Declaration {
 
 	if hasBody {
 		for index, paramName := range decl.paramNames {
-			paramType := decl.dTyp.paramTypes[index].typ
+			paramType := decl.dTyp.paramTypes[index]
 			// every variable should have a unique name at this point, so it won't conflict with any existing entry
-			symbolTable[paramName] = Symbol{dataTyp: Data_Type{typ: paramType}}
+			symbolTable[paramName] = Symbol{dataTyp: *paramType}
 		}
 		*decl.body = typeCheckBlock(*decl.body, decl.name)
 	}

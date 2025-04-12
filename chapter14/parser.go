@@ -801,14 +801,14 @@ func parseParamList(tokens []Token) ([]Param_Info, []Token) {
 			// get the type, static and extern are not allowed for params
 			var specifiers []TokenEnum
 			specifiers, tokens = parseSpecifiers(tokens, false)
-			dTyp := analyzeType(specifiers)
+			baseType := analyzeType(specifiers)
 
-			// get the name
-			var id string
-			id, tokens = parseIdentifier(tokens)
+			var dec Declarator
+			dec, tokens = parseDeclarator(tokens)
+			name, decType, _ := dec.processDeclarator(baseType)
 
 			// add it to the list
-			paramInfo := Param_Info{dTyp: dTyp, dec: &Identifier_Declarator{id}}
+			paramInfo := Param_Info{dTyp: decType, dec: &Identifier_Declarator{name}}
 			paramInfos = append(paramInfos, paramInfo)
 
 			if peekToken(tokens).tokenType == COMMA_TOKEN {
