@@ -322,7 +322,8 @@ func typeCheckFileScopeVarDecl(decl Variable_Declaration) Variable_Declaration {
 	constValExp, isConst := decl.initializer.(*Constant_Value_Expression)
 	if isConst {
 		initEnum = dataTypeEnumToInitEnum(decl.dTyp.typ)
-		decl.initializer = convertToType(decl.initializer, decl.dTyp)
+		decl.initializer = typeCheckExpression(decl.initializer)
+		decl.initializer = convertByAssignment(decl.initializer, decl.dTyp)
 		// TODO: if the constant value is a long that doesn't fit into an int (2147483650L) then
 		// strconv.ParseInt(value, 10, 64), then cast int64 to int32 (for example), then back to string
 		// I tested this and the assembler will truncate it for me.
@@ -395,7 +396,8 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) Variable_Declaration {
 		constValExp, isConstVal := decl.initializer.(*Constant_Value_Expression)
 		if isConstVal {
 			initEnum = dataTypeEnumToInitEnum(decl.dTyp.typ)
-			decl.initializer = convertToType(decl.initializer, decl.dTyp)
+			decl.initializer = typeCheckExpression(decl.initializer)
+			decl.initializer = convertByAssignment(decl.initializer, decl.dTyp)
 			// TODO:
 			// if the constant value is a long that doesn't fit into an int (2147483650L) then
 			// strconv.ParseInt(value, 10, 64), then cast int64 to int32 (for example), then back to string
@@ -413,7 +415,7 @@ func typeCheckLocalVarDecl(decl Variable_Declaration) Variable_Declaration {
 		symbolTable[decl.name] = Symbol{dataTyp: decl.dTyp, attrs: LOCAL_ATTRIBUTES}
 		if decl.initializer != nil {
 			decl.initializer = typeCheckExpression(decl.initializer)
-			decl.initializer = convertToType(decl.initializer, decl.dTyp)
+			decl.initializer = convertByAssignment(decl.initializer, decl.dTyp)
 		}
 	}
 
