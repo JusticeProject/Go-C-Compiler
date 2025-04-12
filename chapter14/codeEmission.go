@@ -156,6 +156,13 @@ func (instr *Move_Zero_Extend_Instruction_Asm) instrEmitAsm(file *os.File) {
 
 /////////////////////////////////////////////////////////////////////////////////
 
+func (instr *Lea_Instruction_Asm) instrEmitAsm(file *os.File) {
+	file.WriteString("\t" + "leaq" + "\t" + instr.src.getOperandString(QUADWORD_ASM_TYPE) + ", " +
+		instr.dst.getOperandString(QUADWORD_ASM_TYPE) + "\n")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 func (instr *Cvttsd2si_Double_To_Int_Instruction_Asm) instrEmitAsm(file *os.File) {
 	file.WriteString("\t" + "cvttsd2si" + getInstructionSuffix(instr.dstAsmType) + "\t" +
 		instr.src.getOperandString(instr.dstAsmType) + ", " + instr.dst.getOperandString(instr.dstAsmType) + "\n")
@@ -349,8 +356,8 @@ func (op *Pseudoregister_Operand_Asm) getOperandString(asmTyp AssemblyTypeEnum) 
 
 /////////////////////////////////////////////////////////////////////////////////
 
-func (op *Stack_Operand_Asm) getOperandString(asmTyp AssemblyTypeEnum) string {
-	return strconv.FormatInt(int64(op.value), 10) + "(%rbp)"
+func (op *Memory_Operand_Asm) getOperandString(asmTyp AssemblyTypeEnum) string {
+	return strconv.FormatInt(int64(op.offset), 10) + "(%" + getRegisterString(op.reg, QUADWORD_ASM_TYPE) + ")"
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -434,6 +441,8 @@ func getRegisterString(reg RegisterTypeAsm, asmTyp AssemblyTypeEnum) string {
 		return "r11" + getScratchRegisterSuffix(asmTyp)
 	case SP_REGISTER_ASM:
 		return "rsp"
+	case BP_REGISTER_ASM:
+		return "rbp"
 	case XMM0_REGISTER_ASM:
 		return "xmm0"
 	case XMM1_REGISTER_ASM:
